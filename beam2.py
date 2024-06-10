@@ -1,3 +1,16 @@
+""" 06/10/24
+extension of hyperelasticity demo
+10x1x1 (x,y,z) beam with 5 cells per unit. E=1, nu =.3.
+beam is pulled in x dimension with 20 stretch ratios (lamda = l/L, l = final length, L = initial length) between 0 and 0.3.
+produces graph with analytical solution (based of 1st Piola Kirchoff tensor) and of the calculated solutions.
+
+//// DATA ////
+lamdas = [0.01    0.02526 0.04053 0.05579 0.07105 0.08632 0.10158 0.11684 0.13211 0.14737 0.16263 0.17789 0.19316 0.20842 0.22368 0.23895 0.25421 0.26947 0.28474 0.3    ]
+experimental forces = [Array(0.01049, dtype=float64), Array(0.02607, dtype=float64), Array(0.04116, dtype=float64), Array(0.05579, dtype=float64), Array(0.06999, dtype=float64), Array(0.08379, dtype=float64), Array(0.09719, dtype=float64), Array(0.11024, dtype=float64), Array(0.12294, dtype=float64), Array(0.13531, dtype=float64), Array(0.14737, dtype=float64), Array(0.15914, dtype=float64), Array(0.17064, dtype=float64), Array(0.18187, dtype=float64), Array(0.19284, dtype=float64), Array(0.20358, dtype=float64), Array(0.2141, dtype=float64), Array(0.22439, dtype=float64), Array(0.23448, dtype=float64), Array(0.24438, dtype=float64)]
+analytical forces =[0.01142 0.02844 0.04496 0.06103 0.07667 0.09189 0.10673 0.12121 0.13533 0.14914 0.16263 0.17582 0.18874 0.20139 0.21379 0.22595 0.23788 0.2496  0.26111 0.27242]
+RMSE error =  0.016688569097990363
+"""
+
 # Import some useful modules.
 import jax
 import jax.numpy as np

@@ -1,3 +1,10 @@
+""" 06/07/24
+extension of nodal stress application
+1x1x1 (x,y,z) cube with 20 cells per unit. E=10, nu =.3.
+cube is pulled in x dimension by 10% (lambda = l/L = 1.1). 
+calculates the J values (det of deformation gradient: det(grad(u))) and outputs to paraview (u and J)
+"""
+
 # Import some useful modules.
 import jax
 import jax.numpy as np

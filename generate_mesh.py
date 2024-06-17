@@ -128,7 +128,7 @@ def box_mesh(Nx, Ny, Nz, Lx, Ly, Lz, data_dir, ele_type='HEX8'):
     msh_dir = os.path.join(data_dir, 'msh')
     os.makedirs(msh_dir, exist_ok=True)
     msh_file = os.path.join(msh_dir, 'box.msh')
-
+    
     offset_x = 0.
     offset_y = 0.
     offset_z = 0.
@@ -170,6 +170,17 @@ def box_mesh(Nx, Ny, Nz, Lx, Ly, Lz, data_dir, ele_type='HEX8'):
     
     return out_mesh
 
+def read_in_mesh(msh_file, cell_type):
+    mesh = meshio.read(msh_file)
+    global cells, points
+    points = mesh.points # (num_total_nodes, dim)
+    # print("p",points)
+    # print(points.shape)
+    cells =  mesh.cells_dict[cell_type] # (num_cells, num_nodes)
+    # print("c",cells)
+    # print("CMAX",np.max(cells),"\n\n")
+    out_mesh = meshio.Mesh(points=points, cells={cell_type: cells})
+    return out_mesh
 
 def cells_out():
     return cells, points

@@ -2,7 +2,7 @@ SetFactory("OpenCASCADE");
 
 // Parameters
 l = 300; // Side length of box
-major = 100; // Major axis length
+major = 60; // Major axis length ( diameter)
 minor = 30;
 
 // Geometry
@@ -17,10 +17,10 @@ Physical Surface(201) = {8, 9, 10, 11, 12, 13};
 Physical Surface(202) = {7};
 
 Mesh.CharacteristicLengthFactor = 1.2;
-Characteristic Length{PointsOf{Physical Surface{202};}} = 3.54/1.2;
-Characteristic Length{PointsOf{Physical Surface{201};}} = 20;
+Characteristic Length{PointsOf{Physical Surface{202};}} = 1; 
+Characteristic Length{PointsOf{Physical Surface{201};}} = 30; 
 
 // Generate Mesh
 Mesh 3;
 Mesh.MshFileVersion = 2.2;
-Save "ellipsoid.msh";
+Save "standardsphere.msh";

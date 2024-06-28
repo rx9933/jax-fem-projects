@@ -2,7 +2,7 @@ SetFactory("OpenCASCADE");
 
 // Parameters
 l = 300; // Side length of box
-major = 100; // Major axis length
+major = 60; // Major axis length
 minor = 30;
 
 // Geometry

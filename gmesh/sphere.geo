@@ -17,10 +17,10 @@ Physical Surface(201) = {8, 9, 10, 11, 12, 13};
 Physical Surface(202) = {7};
 
 Mesh.CharacteristicLengthFactor = 1.2;
-Characteristic Length{PointsOf{Physical Surface{202};}} = 1; 
-Characteristic Length{PointsOf{Physical Surface{201};}} = 30; 
+Characteristic Length{PointsOf{Physical Surface{202};}} = 2; 
+Characteristic Length{PointsOf{Physical Surface{201};}} = 60; 
 
 // Generate Mesh
 Mesh 3;
 Mesh.MshFileVersion = 2.2;
-Save "standardsphere.msh";
+Save "mediumsphere.msh";

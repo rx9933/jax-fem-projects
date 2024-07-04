@@ -82,14 +82,12 @@ def get_alpha(x0):
     vi = onp.loadtxt('cell_vertices_initial.txt') 
     rff = 100 # characteristic distance "ff" for farfield
     vi = np.array(vi) # mesh vertices on cell surface
-    rs = np.min(np.linalg.norm(x0-vi)) # distance to cell surface
-    # print("rs",onp.array(rs))
-    # print("rff",onp.array(rff))
+
+    rs = np.min(np.linalg.norm(x0-vi,axis=1)) # distance to cell surface
     rsc = np.minimum(rs, rff) # clipped distance to cell surface
     a0 = 2.5
     rcrit = rff*np.sqrt(2*a0-1)/(np.sqrt(2*a0-1)+1) #characterestic distance for most degraded gel portion
     aideal = 1/2*(((rsc-rcrit)/(rff-rcrit))**2 + 1)
-
     return aideal
 
 def get_j(F):
@@ -100,6 +98,7 @@ def get_f(u_grad):
     F = u_grad + I
     return F
 
+
 def get_shape_grads_ref(ele_type):
     element_family, basix_ele, _, _, degree, re_order = get_elements(ele_type)
     element = basix.create_element(element_family, basix_ele, degree)
@@ -108,7 +107,7 @@ def get_shape_grads_ref(ele_type):
     shape_grads_ref = onp.transpose(vals_and_grads[1:, :, :, 0], axes=(1, 2, 0))
     logger.debug(f"ele_type = {ele_type}, node_points.shape = (num_nodes, dim) = {node_points.shape}")
     return shape_grads_ref
-
+ 
 def get_shape_grads_physical(problem):
     shape_grads_ref = get_shape_grads_ref(problem.fes[0].ele_type)
     physical_coos = problem.fes[0].points[problem.fes[0].cells]
@@ -116,6 +115,10 @@ def get_shape_grads_physical(problem):
     jacobian_deta_dx = onp.linalg.inv(jacobian_dx_deta)
     shape_grads_physical = (shape_grads_ref[None, :, :, None, :] @ jacobian_deta_dx)[:, :, :, 0, :]
     return shape_grads_physical
+
+
+
+
 
 init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
 disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
@@ -138,11 +141,31 @@ def zcell_displacement(point, load_factor=1):
     return disp[i,:][0][0][2]*load_factor
 
 def problem():
-    print("GET ALPHA",get_alpha(np.array([100,77,100])))
+    
+    def apply_load_steps(problem, num_steps = 3):
+        num_steps = 3
+        load_factor = 1 / num_steps
+        for step in np.arange(0, 1 + 1/num_steps, 1 / num_steps ):
+            logger.info(f"STEP {step}")
+            print("STEP",step)
+            load_factor = step
+            print("LF =",load_factor)
+            problem.dirichlet_bc_info[0][2][3:] = [
+                lambda point, load_factor=load_factor: xcell_displacement(point, load_factor),
+                lambda point, load_factor=load_factor: ycell_displacement(point, load_factor),
+                lambda point, load_factor=load_factor: zcell_displacement(point, load_factor)
+            ]
+            
+            problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+            if step ==0 :
+                sol = solver(problem, use_petsc=True)
+            else:
+                sol = solver(problem, use_petsc=True, initial_guess=sol)
+            return sol
+        
     ele_type = 'TET4'
     cell_type = get_meshio_cell_type(ele_type)
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
-    # Lx, Ly, Lz = 1., 1., 1.
     meshio_mesh = read_in_mesh("reference_domain.xdmf", cell_type)
     mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
     box_length = 300
@@ -177,102 +200,24 @@ def problem():
         )
 
     pdata = onp.loadtxt('cell_vertices_initial.txt')
+
     def cell_surface(point):
         return np.any(np.isclose(point, np.array(pdata)))
     
-    #TESTS
-    # print(cell_surface(np.array([8.254631805419921875e+01, 8.463780975341796875e+01, 2.081762695312500000e+01])))
-    print(gel_surface(np.array([77.30223623+150, 2, 2])))
-    act = onp.loadtxt('cell_vertices_final.txt')
-    c = 0
-    for point in pdata:
-        # point = onp.array([8.254631805419921875e+01, 8.463780975341796875e+01, 2.081762695312500000e+01])
-        
-        x = onp.asarray(xcell_displacement(point))
-        y = onp.asarray(ycell_displacement(point))
-        z = onp.asarray(zcell_displacement(point))
-        disp = onp.stack((x,y,z))
-        # print("y val",y)
-
-        pred = disp + point#onp.array([8.254631805419921875e+01, 8.463780975341796875e+01, 2.081762695312500000e+01])
-        for r in act:
-            if onp.linalg.norm(r-pred)< 10**-5:
-                c +=1
-    assert c == pdata.shape[0]
-    # x = onp.asarray(xcell_displacement(np.array([8.262040710449218750e+01, 8.185975646972656250e+01, 1.208771514892578125e+01])))
-    # 
 
 
-    # dirichlet_bc_info = [[cell_surface] * 3,
-    #                      [0, 1, 2] * 1,
-    #                      [xcell_displacement, ycell_displacement,zcell_displacement]]
-    # a = gel_surface(np.array([77.30223623+150, 2, 2]))
-    # print("a", gel_surface(np.array([77.30223623+150, 2, 2])))
-    
     dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
                         [0, 1, 2] * 2, 
                         [zero_dirichlet_val, zero_dirichlet_val, zero_dirichlet_val] + 
                         [xcell_displacement, ycell_displacement, zcell_displacement]]
     
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    num_steps = 3
-    load_factor = 1 / num_steps
-    for step in np.arange(0, 1 + 1/num_steps, 1 / num_steps ):
-        logger.info(f"STEP {step}")
-        print("STEP",step)
-        load_factor = step
-        print("LF =",load_factor)
-        problem.dirichlet_bc_info[0][2][3:] = [
-            lambda point, load_factor=load_factor: xcell_displacement(point, load_factor),
-            lambda point, load_factor=load_factor: ycell_displacement(point, load_factor),
-            lambda point, load_factor=load_factor: zcell_displacement(point, load_factor)
-        ]
-        
-        problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        if step ==0 :
-            sol = solver(problem, use_petsc=True)
-            initial_sol = sol
-        else:
-            sol = solver(problem, use_petsc=True, initial_guess=initial_sol)
-            initial_sol = sol
+
     print("DONE SOLVING")
-    vtk_path = os.path.join(data_dir, f'vtk/alphacell.vtu')
 
-    first_PK_stress = problem.get_tensor_map_spatial_var()
+    sol = apply_load_steps(problem, 3)
+    # first_PK_stress = problem.get_tensor_map_spatial_var()
     cells, points = cells_out()
-    shape_grads_physical = get_shape_grads_physical(problem)
-    cell_sols = sol[0][np.array(problem.fes[0].cells)]
-    u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
-    u_grads = np.sum(u_grads, axis=2)
-
-
-    # Initialize stress tensor, J matrix, and alpha matrix
-    ug_s = u_grads.shape
-    stress_tensor = np.zeros(ug_s)
-    j_mat = np.zeros(ug_s[:2])
-    alpha_mat = np.zeros(ug_s[:2])
-
-    # Get global point indices
-    global_point_inds = cells
-
-    # Get point values
-    point_vals = points[global_point_inds]
-
-    # Vectorize the operations for stress tensor, j_mat, and alpha_mat
-    vectorized_first_PK_stress = np.vectorize(first_PK_stress, signature='(n,m),(o)->(n,m)')
-    vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
-    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
-    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
-
-    # Compute stress tensor
-    stress_tensor = vectorized_first_PK_stress(u_grads, point_vals)
-
-    # Compute deformation gradient and J matrix
-    f_vals = vectorized_get_f(u_grads)
-    j_mat = vectorized_get_j(f_vals)
-
-    # Compute alpha matrix
-    alpha_mat = vectorized_get_alpha(point_vals)
 
     def localize(orig_mat):
         local_mat = np.zeros(len(points))
@@ -283,16 +228,42 @@ def problem():
                 ind = np.where(np.all(points == point, axis = 1))
                 local_mat = local_mat.at[ind].add(orig_mat[r,c])
                 num_repeat = num_repeat.at[ind].add(1)
-            if r%100==0:
-                print("row num", r) 
+            if r%100==0:  
+                print("percent finished", r/cells.shape[0]*100) 
         local_mat = local_mat/num_repeat
         return local_mat
 
-    # Localize J and alpha matrices
+    shape_grads_physical = get_shape_grads_physical(problem)
+    cell_sols = sol[0][np.array(problem.fes[0].cells)]
+    u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
+    u_grads = np.sum(u_grads, axis=2)
+
+
+    # Initialize J matrix, and alpha matrix
+    ug_s = u_grads.shape
+    j_mat = np.zeros(ug_s[:2])
+    alpha_mat = np.zeros(ug_s[:2])
+
+    # Get global point indices
+    global_point_inds = cells
+
+    # Get point values
+    point_vals = points[global_point_inds]
+
+    # Vectorize the operations for j_mat, and alpha_mat
+    vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
+    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+
+    f_vals = vectorized_get_f(u_grads)
+    j_mat = vectorized_get_j(f_vals)
+
+    alpha_mat = vectorized_get_alpha(point_vals)
+
     local_j = localize(j_mat)
     local_alpha = localize(alpha_mat)
 
-    print(j_mat)
+    vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
     save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
     
 if __name__ == "__main__":
@@ -302,5 +273,6 @@ if __name__ == "__main__":
         start_time = time.time()
         problem()
         t = t.at[i].set(time.time() - start_time)
-    print(t) #avg t 3.945726823806763 std 0.5014158602174434
+    print(t)
     print("avg t",np.average(t), "std", np.std(t))
+  

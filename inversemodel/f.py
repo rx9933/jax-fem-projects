@@ -1,9 +1,9 @@
 import time
 import os
 import sys
-os.environ['JAX_PLATFORMS'] = 'cpu'
-# sys.path.insert(0, os.path.abspath('..'))
-# sys.path.append('/workspace')
+sys.path.insert(0, os.path.abspath('..'))
+sys.path.append('/workspace')
+
 from math import sqrt
 import jax
 import jax.numpy as np
@@ -80,7 +80,12 @@ meshio_mesh = read_in_mesh("reference_domain.xdmf", cell_type)
 points = meshio_mesh.points    
 alpha = np.load('alpha.npy')
 def get_alpha(x0):
-    ind = np.where(x0 == points.ravel)
+    print("P0", points)
+    print("X0",x0)
+    # print(points)
+    # print("PR",onp.asarray(points))
+    print("x0", onp.asarray(x0))
+    ind = np.where(onp.asarray(x0) == onp.asarray(points).ravel)
     return alpha[ind]
     # flatten points
     # find out ind for x0
@@ -287,6 +292,7 @@ def problem():
     vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
     save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
     return C
+
 def main():
     l=1
     t = np.zeros(l)

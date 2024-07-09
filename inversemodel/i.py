@@ -24,7 +24,7 @@ def objective(alpha): # phi
     ## need to call v. main and use alpha in this call to reset value of csim
     f.main() # call f main but don't need to use alpha, since previous alpha value has already been saved in a.npy
 
-    np.save('alpha.npy',np.asarray(alpha))
+    np.save('alpha.npy',np.asarray(alpha)) # jnp.asarray?
     Csim = np.load('Csim.npy')
     disp_matching = np.linalg.norm(Ctarget-Csim)**2
     

@@ -3,7 +3,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('/workspace')
-
+# os.environ['JAX_PLATFORMS'] = 'cpu'
 from math import sqrt
 import jax
 import jax.numpy as np
@@ -55,13 +55,13 @@ class HyperElasticity(Problem):
         def psi(F, X):
 
             # alpha = (radius_cell / np.linalg.norm(X - CENTER)) ** beta
-            alpha = get_alpha(X)
+            a = get_alpha(X)
             # alpha = 1
             C1 = 50 
             D1 = 10000 * C1 
             J = np.linalg.det(F)
             I1 = np.trace(F.T @ F)
-            energy = alpha * C1 * (I1 - 3.)  - 2 * np.log(J) + D1 *(np.log(J))**2
+            energy = a * C1 * (I1 - 3.)  - 2 * np.log(J) + D1 *(np.log(J))**2
             return energy
 
         P_fn = jax.grad(psi)
@@ -78,31 +78,11 @@ ele_type = 'TET4'
 cell_type = get_meshio_cell_type(ele_type)     
 meshio_mesh = read_in_mesh("reference_domain.xdmf", cell_type)
 points = meshio_mesh.points    
-alpha = np.load('alpha.npy')
+
+@jax.jit
 def get_alpha(x0):
-    print("P0", points)
-    print("X0",x0)
-    # print(points)
-    # print("PR",onp.asarray(points))
-    print("x0", onp.asarray(x0))
-    ind = np.where(onp.asarray(x0) == onp.asarray(points).ravel)
-    return alpha[ind]
-    # flatten points
-    # find out ind for x0
-    # read in alpha from a.npy
-    # return a.npy[ind]
-
-    # FOR ORIGINAL HIGH-LOW-HIGH ALPHA FIELD
-    # vi = onp.loadtxt('cell_vertices_initial.txt') 
-    # rff = 100 # characteristic distance "ff" for farfield
-    # vi = np.array(vi) # mesh vertices on cell surface
-
-    # rs = np.min(np.linalg.norm(x0-vi,axis=1)) # distance to cell surface
-    # rsc = np.minimum(rs, rff) # clipped distance to cell surface
-    # a0 = 2.5
-    # rcrit = rff*np.sqrt(2*a0-1)/(np.sqrt(2*a0-1)+1) #characterestic distance for most degraded gel portion
-    # aideal = 1/2*(((rsc-rcrit)/(rff-rcrit))**2 + 1)
-    # return aideal
+    ind = np.where(np.linalg.norm(points-x0) < tol, 1, 0)
+    return alpha_f[ind]
 
 def get_j(F):
     return np.linalg.det(F)
@@ -163,14 +143,12 @@ distol = .2
 r = 30
 centroid = np.array([77.30223623, 77.03447408, 66.74390624])
 bounds = np.stack((centroid-box_length/2, centroid+box_length/2))
-# print("BOUNDS",bounds)
 
 def gel_surface(point):
     px, py, pz = point[0], point[1], point[2]
     nx, mx = bounds[:,0][0], bounds[:,0][1]
     ny, my = bounds[:,1][0], bounds[:,1][1]
     nz, mz = bounds[:,2][0], bounds[:,2][1]
-    # print("m",nx, mx)
 
     return np.logical_or(
         np.isclose(np.abs(px - nx), 0, atol=distol),
@@ -193,10 +171,9 @@ pdata = onp.loadtxt('cell_vertices_initial.txt')
 def cell_surface(point):
     return np.any(np.isclose(point, np.array(pdata)))
 
-def problem():
+def problem(s=False):
     
-    def apply_load_steps(problem, num_steps = 3):
-        num_steps = 3
+    def apply_load_steps(problem, num_steps = 2):
         load_factor = 1 / num_steps
         for step in np.arange(0, 1 + 1/num_steps, 1 / num_steps ):
             logger.info(f"STEP {step}")
@@ -216,15 +193,7 @@ def problem():
                 sol = solver(problem, use_petsc=True, initial_guess=sol)
         return sol
         
-    # ele_type = 'TET4'
-    # cell_type = get_meshio_cell_type(ele_type)
-    data_dir = os.path.join(os.path.dirname(__file__), 'data')
-    # meshio_mesh = read_in_mesh("reference_domain.xdmf", cell_type)
     mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
-    
-
-    
-
 
     dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
                         [0, 1, 2] * 2, 
@@ -232,76 +201,87 @@ def problem():
                         [xcell_displacement, ycell_displacement, zcell_displacement]]
     
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    
 
+    sol = apply_load_steps(problem, 2)
     print("DONE SOLVING")
 
-    sol = apply_load_steps(problem, 3)
-    # first_PK_stress = problem.get_tensor_map_spatial_var()
-    cells, points = cells_out()
 
-    def localize(orig_mat):
-        local_mat = np.zeros(len(points))
-        num_repeat = np.zeros(len(points))
-        for r in range(cells.shape[0]):
-            for c in range(cells.shape[1]):
-                point = points[cells[r,c]]
-                ind = np.where(np.all(points == point, axis = 1))
-                local_mat = local_mat.at[ind].add(orig_mat[r,c])
-                num_repeat = num_repeat.at[ind].add(1)
-            if r%100==0:  
-                print("percent finished", r/cells.shape[0]*100) 
-        local_mat = local_mat/num_repeat
-        return local_mat
+    def save_sol_par():
+        cells, points = cells_out()
 
-    shape_grads_physical = get_shape_grads_physical(problem)
-    cell_sols = sol[0][np.array(problem.fes[0].cells)]
-    u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
-    u_grads = np.sum(u_grads, axis=2)
-    # print("get c", get_c(get_f(u_grads)))
-    # print( get_c(get_f(u_grads)).shape)
+        def localize(orig_mat):
+            # Number of points
+            num_points = points.shape[0]
 
-    # Initialize J matrix, and alpha matrix
-    ug_s = u_grads.shape
-    j_mat = np.zeros(ug_s[:2])
-    alpha_mat = np.zeros(ug_s[:2])
+            # Flatten cells and orig_mat
+            flattened_cells = cells.flatten()
+            flattened_orig_mat = orig_mat.flatten()
 
-    # Get global point indices
-    global_point_inds = cells
+            # Create indices for repeated points
+            repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
+            point_indices = flattened_cells
 
-    # Get point values
-    point_vals = points[global_point_inds]
+            # Create an array to match points to their original indices
+            updates_local_mat = np.zeros(num_points).at[point_indices].add(flattened_orig_mat)
+            updates_num_repeat = np.zeros(num_points).at[point_indices].add(1)
 
-    # Vectorize the operations for j_mat, and alpha_mat
-    vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
-    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
-    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+            # Normalize local_mat by num_repeat
+            local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
 
-    f_vals = vectorized_get_f(u_grads)
-    C = get_c(f_vals)
-  
-    
-    j_mat = vectorized_get_j(f_vals)
+            return local_mat
 
-    alpha_mat = vectorized_get_alpha(point_vals)
-    # np.save('alpha.npy', alpha_mat)
-    # print("ALPHA SHAPE", alpha_mat.shape) # 19634,4
-    local_j = localize(j_mat)
-    local_alpha = localize(alpha_mat)
+        shape_grads_physical = get_shape_grads_physical(problem)
+        cell_sols = sol[0][np.array(problem.fes[0].cells)]
+        u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
+        u_grads = np.sum(u_grads, axis=2)
 
-    vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
-    save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
-    return C
+        # Initialize J matrix, and alpha matrix
+        ug_s = u_grads.shape
+        j_mat = np.zeros(ug_s[:2])
+        alpha_mat = np.zeros(ug_s[:2])
 
-def main():
+        # # Get global point indices
+        global_point_inds = cells
+
+        # # Get point values
+        point_vals = points[global_point_inds]
+
+        # Vectorize the operations for j_mat, and alpha_mat
+        vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
+        vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+        vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+
+        f_vals = vectorized_get_f(u_grads)
+
+        j_mat = vectorized_get_j(f_vals)
+
+        alpha_mat = vectorized_get_alpha(points)
+
+        local_j = localize(j_mat)
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
+        save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":alpha_mat}])
+    if s:
+        save_sol_par()
+
+# alpha_f = np.ones((19634,4)).ravel
+
+def main(alpha,s):
+
+    global alpha_f 
+    alpha_f = np.array(alpha)
+
     l=1
     t = np.zeros(l)
     for i in range(l):
         start_time = time.time()
-        C = problem()
+        problem(s)
         t = t.at[i].set(time.time() - start_time)
     print(t)
     print("avg t",np.average(t), "std", np.std(t))
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     global alpha
+#     alpha = np.load('alpha.npy')
+#     s = True # default value when running just the forward model, save the alpha/j values
+#     main(alpha,s)

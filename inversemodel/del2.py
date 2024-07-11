@@ -24,4 +24,7 @@ def mat():
     val = ind(x)
     # print(a)
     return val
-print(mat())
+# print(mat())
+a =1
+a = a + 1
+print(a)

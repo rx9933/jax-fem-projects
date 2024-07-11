@@ -31,37 +31,48 @@ np.save('gellpoints.npy', pdata)
 
 alpha_0 = np.ones((len(pdata),))
 
+# run f.py with alpha_0
+# compute C target
 
-np.save('alpha.npy',alpha_0)
+#np.save('alpha.npy',alpha_0)
 
 import f
+    
+s = False
+alpha = alpha_0
+Ctarget = f.main(alpha, s)
 
-def objective(alpha): 
+def objective(alpha, Csim): 
     # print(alpha)
-    Ctarget = np.load('C.npy')
+    # Ctarget = np.load('C.npy')
     # global iter
     # print("ITER", iter,'\n')
     # iter +=1
     # f.main(alpha,s) # pass in new alpha, as scipy optimizes phi(alpha)
 
-    Csim = np.load('Csim.npy')
+    # Csim = np.load('Csim.npy')
     disp_matching = jnp.asarray(np.linalg.norm(Ctarget-Csim)**2)
     
-    regularization=10
+    regularization=10**3
     tik = jnp.sum(jnp.gradient(alpha)**2)
  
     tikhanov = tik*regularization
     print("OBJECTIVE", disp_matching+tikhanov)
     return disp_matching+tikhanov
-    
-s = False
-alpha = alpha_0
+
+global Csim
 for i in range(5):
-    r = .01
+    print("opt iteration",i,"\n\n")
+    r = 100
+    Csim = f.main(alpha,s)
     gradobj = jax.grad(objective)
-    print("OBJ GRAD",gradobj(alpha))
-    alpha = alpha-r*gradobj(alpha)
-    f.main(alpha,s)
+    print("OBJ GRAD",gradobj(alpha,Csim))
+    alpha = alpha-r*gradobj(alpha,Csim)
+
+
+    # get out C sim
+    # pass C sim, C target into objecctive when calling gradobj
+
 print("Final alpha",alpha)
 f.main(alpha,True)
 # dphi = jax.grad(objective)

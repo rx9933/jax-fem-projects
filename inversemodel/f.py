@@ -78,10 +78,11 @@ ele_type = 'TET4'
 cell_type = get_meshio_cell_type(ele_type)     
 meshio_mesh = read_in_mesh("reference_domain.xdmf", cell_type)
 points = meshio_mesh.points    
-
+print("81",points.shape)
 @jax.jit
 def get_alpha(x0):
     ind = np.where(np.linalg.norm(points-x0) < tol, 1, 0)
+    print("ALPHAF", alpha_f)
     return alpha_f[ind]
 
 def get_j(F):
@@ -133,8 +134,8 @@ def zcell_displacement(point, load_factor=1):
     i = np.nonzero(ind,size=1)#(ind==np.array([1,1,1]))
     return disp[i,:][0][0][2]*load_factor
 def get_c(f_vals):
-    C = f_vals.swapaxes(2, 3) @ f_vals
-    np.save('Csim.npy', C)
+    print(f_vals.shape)
+    C = f_vals.swapaxes(3, 4) @ f_vals
     return C
 
 
@@ -205,30 +206,31 @@ def problem(s=False):
     sol = apply_load_steps(problem, 2)
     print("DONE SOLVING")
 
+    cells, points = cells_out()
 
+    def localize(orig_mat):
+        # Number of points
+        num_points = points.shape[0]
+
+        # Flatten cells and orig_mat
+        flattened_cells = cells.flatten()
+        flattened_orig_mat = orig_mat.flatten()
+
+        # Create indices for repeated points
+        repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
+        point_indices = flattened_cells
+
+        # Create an array to match points to their original indices
+        updates_local_mat = np.zeros(num_points).at[point_indices].add(flattened_orig_mat)
+        updates_num_repeat = np.zeros(num_points).at[point_indices].add(1)
+
+        # Normalize local_mat by num_repeat
+        local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
+
+        return local_mat
+    
     def save_sol_par():
-        cells, points = cells_out()
-
-        def localize(orig_mat):
-            # Number of points
-            num_points = points.shape[0]
-
-            # Flatten cells and orig_mat
-            flattened_cells = cells.flatten()
-            flattened_orig_mat = orig_mat.flatten()
-
-            # Create indices for repeated points
-            repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
-            point_indices = flattened_cells
-
-            # Create an array to match points to their original indices
-            updates_local_mat = np.zeros(num_points).at[point_indices].add(flattened_orig_mat)
-            updates_num_repeat = np.zeros(num_points).at[point_indices].add(1)
-
-            # Normalize local_mat by num_repeat
-            local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
-
-            return local_mat
+      
 
         shape_grads_physical = get_shape_grads_physical(problem)
         cell_sols = sol[0][np.array(problem.fes[0].cells)]
@@ -238,6 +240,7 @@ def problem(s=False):
         # Initialize J matrix, and alpha matrix
         ug_s = u_grads.shape
         j_mat = np.zeros(ug_s[:2])
+        print("JMAT",cells.shape)
         alpha_mat = np.zeros(ug_s[:2])
 
         # # Get global point indices
@@ -250,36 +253,50 @@ def problem(s=False):
         vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
         vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
         vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
-
+        
         f_vals = vectorized_get_f(u_grads)
 
         j_mat = vectorized_get_j(f_vals)
 
         alpha_mat = vectorized_get_alpha(points)
-
+        # print("amat shape", alpha_f)
         local_j = localize(j_mat)
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
         vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
-        save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":alpha_mat}])
+        
+        save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":alpha_f}])
+        return f_vals
     if s:
-        save_sol_par()
+        f_vals = save_sol_par()
+    if not(s):     # get required values to return c
+        shape_grads_physical = get_shape_grads_physical(problem)
+        cell_sols = sol[0][np.array(problem.fes[0].cells)]
+        u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :] 
 
-# alpha_f = np.ones((19634,4)).ravel
+        vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+        print("VG",vectorized_get_f)
+        print("ugrad",u_grads.shape)
+        f_vals = vectorized_get_f(u_grads)
+
+        print("FVV",f_vals.shape)
+        return get_c(f_vals) # C sim 
 
 def main(alpha,s):
-
     global alpha_f 
     alpha_f = np.array(alpha)
-
+   
     l=1
     t = np.zeros(l)
     for i in range(l):
         start_time = time.time()
-        problem(s)
+        Csim = problem(s)
         t = t.at[i].set(time.time() - start_time)
-    print(t)
+    # print(t)
     print("avg t",np.average(t), "std", np.std(t))
 
+    if not(s):
+        return Csim
+    
 # if __name__ == "__main__":
 #     global alpha
 #     alpha = np.load('alpha.npy')

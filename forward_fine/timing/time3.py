@@ -279,9 +279,9 @@ def problem():
 
     # alpha_mat = vectorized_get_alpha(point_vals)
     pshape = point_vals.shape
-    for c in pshape[0]:
-        for p in c:
-            alpha_mat[c,p] = get_alpha(point_vals[c,p])
+    for c in range(pshape[0]):
+        for p in range(pshape[1]):
+            alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p]))
 
     local_j = localize(j_mat)
     local_alpha = localize(alpha_mat)

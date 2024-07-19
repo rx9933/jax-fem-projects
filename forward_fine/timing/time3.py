@@ -226,9 +226,12 @@ def problem():
     
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
 
-    print("DONE SOLVING")
 
+    print("DONE SETTING UP PROBLEM")
     sol = apply_load_steps(problem, 2)
+
+    print("DONE SOLVING")
+    """
     cells, points = cells_out()
 
     def localize(orig_mat):
@@ -280,6 +283,7 @@ def problem():
     # alpha_mat = vectorized_get_alpha(point_vals)
     pshape = point_vals.shape
     for c in range(pshape[0]):
+        print(c/pshape[0])
         for p in range(pshape[1]):
             alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p]))
 
@@ -287,7 +291,7 @@ def problem():
     local_alpha = localize(alpha_mat)
     vtk_path = os.path.join(data_dir, f'vtk/varalpha.vtu')
     save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
-    
+    """
 if __name__ == "__main__":
     l=20
     t = np.zeros(l)
@@ -295,6 +299,7 @@ if __name__ == "__main__":
         start_time = time.time()
         problem()
         t = t.at[i].set(time.time() - start_time)
+        # print(t)
     print(t)
-    print("avg t",np.average(t), "std", np.std(t))
+    print("avg t",np.average(t[1:]), "std", np.std(t[1:]))
   

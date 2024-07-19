@@ -82,7 +82,7 @@ class HyperElasticity(Problem):
 
         return first_PK_stress
     
-"""    
+
 vi = np.array(onp.loadtxt('cell_vertices_initial.txt'))    
 def get_alpha(x0):
     rff = 60 # characteristic distance "ff" for farfield
@@ -92,38 +92,6 @@ def get_alpha(x0):
     a0 = 2.5
     rcrit = rff*np.sqrt(2*a0-1)/(np.sqrt(2*a0-1)+1) #characterestic distance for most degraded gel portion
     aideal = 1/2*(((rsc-rcrit)/(rff-rcrit))**2 + 1)
-    return aideal
-"""
-def calculate_min_distance_in_chunks(x0, file_path, chunk_size=1000):
-    min_distance = np.inf  # Initialize with infinity
-    with open(file_path, 'r') as file:
-        while True:
-            lines = [next(file, None) for _ in range(chunk_size)]
-            lines = list(filter(None, lines))  # Remove None values
-            if not lines:
-                break
-
-            vi_chunk = np.array([list(map(float, line.split())) for line in lines])
-            distances = np.linalg.norm(x0 - vi_chunk, axis=1)
-            min_distance = np.minimum(min_distance,np.min(distances))
-    
-    return min_distance
-
-def get_alpha(x0):
-    rff = 60  # Characteristic distance "ff" for farfield
-
-    # Calculate the minimum distance to the cell surface using chunks
-    rs = calculate_min_distance_in_chunks(x0, 'cell_vertices_initial.txt')
-
-    # Clip the distance to the cell surface
-    rsc = np.minimum(rs, rff)
-
-    # Define constants
-    a0 = 2.5
-    rcrit = rff * np.sqrt(2 * a0 - 1) / (np.sqrt(2 * a0 - 1) + 1)
-
-    # Calculate the ideal alpha
-    aideal = 0.5 * (((rsc - rcrit) / (rff - rcrit)) ** 2 + 1)
     return aideal
 
 
@@ -304,12 +272,16 @@ def problem():
     # Vectorize the operations for j_mat, and alpha_mat
     vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
     vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
-    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+    # vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
 
     f_vals = vectorized_get_f(u_grads)
     j_mat = vectorized_get_j(f_vals)
 
-    alpha_mat = vectorized_get_alpha(point_vals)
+    # alpha_mat = vectorized_get_alpha(point_vals)
+    pshape = point_vals.shape
+    for c in pshape[0]:
+        for p in c:
+            alpha_mat[c,p] = get_alpha(point_vals[c,p])
 
     local_j = localize(j_mat)
     local_alpha = localize(alpha_mat)

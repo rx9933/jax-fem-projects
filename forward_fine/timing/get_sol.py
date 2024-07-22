@@ -127,27 +127,13 @@ def get_shape_grads_physical(problem):
 
 init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
 disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
-tol = 10**-3
+tol = 10**-10
 
 def zero_dirichlet_val(point, load_factor=1):
     return 0.0
 
 def xcell_displacement(point, load_factor=1):
-    current, peak = tracemalloc.get_traced_memory()
-    # print(point[0])
-    # print(init_pos[:,0][0])
-    # print(np.absolute(init_pos[:,0]-point[0]))
-    print(f"Current memory usage (before ind) is {current / 10**6}MB; Peak was {peak / 10**6}MB")
     ind = np.argwhere(np.absolute(init_pos[:,0]-point[0]) < tol,size=1)
-    # print("ind",ind)
-    # for r in ind:
-    #     if r[0]!=0:
-    #         print("YYY")
-    # else:
-    #     print("nnn")
-    current, peak = tracemalloc.get_traced_memory()
-    print(f"Current memory usage is (after ind) {current / 10**6}MB; Peak was {peak / 10**6}MB")
-    # print("ind",ind)
     return disp[ind[0,0]][0]*load_factor
 
 def ycell_displacement(point, load_factor=1):
@@ -240,7 +226,7 @@ def problem():
 
 
     print("DONE SETTING UP PROBLEM")
-    sol = apply_load_steps(problem, 3000)
+    sol = apply_load_steps(problem, 3)
 
     print("DONE SOLVING")
     

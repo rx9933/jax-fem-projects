@@ -115,11 +115,12 @@ def get_shape_grads_physical(problem):
     return shape_grads_physical
 
 init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
-disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
-print("ww",np.where(np.abs(disp- np.array([-0.48657, -0.73369,  3.01284]))<.4))
-print(init_pos[54])
+disp = np.asarray(onp.load("cell_vertices_stretched.txt.npy")) - init_pos
+# print("ww",np.where(np.abs(disp- np.array([-0.48657, -0.73369,  3.01284]))<.4))
+# print(init_pos[54])
 # print(np.where(np.linalg.norm(disp[:,0]--0.48657)<10**0))
-print(disp[:,2])
+# print(disp[:,2])
+
 tol = 10**-9
 
 def zero_dirichlet_val(point):
@@ -176,10 +177,10 @@ def problem():
             problem.dirichlet_bc_info[0][2][3:]=[lambda point: _xcell_displacement(point, load_factor),
                                                  lambda point: _ycell_displacement(point, load_factor),
                                                  lambda point: _zcell_displacement(point, load_factor)]
-            print(_xcell_displacement(np.array([8.254631805419921875e+01, 8.185975646972656250e+01, 1.208771514892578125e+01]),load_factor))
+            # print(_xcell_displacement(np.array([8.254631805419921875e+01, 8.185975646972656250e+01, 1.208771514892578125e+01]),load_factor))
             if step ==1/num_steps :
                 sol = solver(problem, use_petsc=True)
-                print(_xcell_displacement(np.array([8.254631805419921875e+01, 8.185975646972656250e+01, 1.208771514892578125e+01]),load_factor))
+                # print(_xcell_displacement(np.array([8.254631805419921875e+01, 8.185975646972656250e+01, 1.208771514892578125e+01]),load_factor))
             else:
                 sol = solver(problem, use_petsc=True, initial_guess=sol)
         return sol
@@ -211,7 +212,7 @@ def problem():
     pdata = onp.loadtxt('cell_vertices_initial.txt')
  
     def cell_surface(point):
-        return np.all(np.isclose(point, np.array(pdata),atol=10**-2),axis=1)
+        return np.all(np.isclose(point, np.array(pdata),atol=10**-4),axis=1)
     distol = 10**-5
     # def gel_surface(point):
     #     px, py, pz = point[0], point[1], point[2]
@@ -239,23 +240,26 @@ def problem():
     
     def gel_surface(point):
         px, py, pz = point[0], point[1], point[2]
+    
         nx, mx = bounds[:,0][0], bounds[:,0][1]
         ny, my = bounds[:,1][0], bounds[:,1][1]
         nz, mz = bounds[:,2][0], bounds[:,2][1]
-
-        left = np.isclose(point[0], nx, atol=1e-5)
-        right = np.isclose(point[0], mx, atol=1e-5)
-        front = np.isclose(point[1], ny, atol=1e-5)
-        back = np.isclose(point[1], my, atol=1e-5)
-        top = np.isclose(point[2], nz, atol=1e-5)
-        bottom = np.isclose(point[2], mz, atol=1e-5)
+       
+        print("nx", nx, mx)
+        print("ny", ny, my)
+        print("nz", nz, mz)
+        t = 10**-2
+        left = np.isclose(point[0], nx, rtol=t)
+        right = np.isclose(point[0], mx, rtol=t)
+        front = np.isclose(point[1], ny, rtol=t)
+        back = np.isclose(point[1], my, rtol=t)
+        top = np.isclose(point[2], nz, rtol=t)
+        bottom = np.isclose(point[2], mz, rtol=t)
         return left | right | front | back | top | bottom
     
-    print("aba",gel_surface(np.array([67.1986, 227.034, -25.5638])))
-    print("abac",cell_surface(np.array([67.1986, 227.034, -25.5638])))
-    # print("",_xcell_displacement(np.array([67.1986, 227.034, -25.5638]),1))
-    # print(disp[:,0])
-    # print(np.where(np.abs(disp[:,0]+.651649)<10**-4))
+    print("pgel surface",gel_surface(np.array([67.1986, 227.034, -25.5638])))
+    print("not pcell surface",np.all(cell_surface(np.array([67.1986, 227.034, -25.5638]))==False))
+
     pdata = onp.loadtxt('cell_vertices_initial.txt')
 
     def cell_surface(point):
@@ -267,16 +271,16 @@ def problem():
                         [zero_dirichlet_val, zero_dirichlet_val, zero_dirichlet_val] + 
                         [lambda point: _xcell_displacement(point, 1), lambda point: _ycell_displacement(point, 1), lambda point: _zcell_displacement(point, 1)]]
 
-    fdata = onp.loadtxt('cell_vertices_final.txt')
+    # fdata = onp.loadtxt('cell_vertices_stretched.txt')
     # for i,p in enumerate(pdata):
     #     assert (p+np.array([xcell_displacement(p),ycell_displacement(p),zcell_displacement(p)])==fdata[i]).all
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
 
     print("DONE SOLVING")
 
-    sol = apply_load_steps(problem, 1)
+    sol = apply_load_steps(problem, 3)
     vtk_path = os.path.join(data_dir, f'vtk/f.vtu')
-    print(np.max(sol[0]))
+    print("Max x",np.max(sol[0]))
     save_sol(problem.fes[0], sol[0], vtk_path)
     """
     # first_PK_stress = problem.get_tensor_map_spatial_var()

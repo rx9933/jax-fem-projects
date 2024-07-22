@@ -1,0 +1,5 @@
+time3.py output: 
+run time in seconds: [41.52542 36.81888 36.62083 36.62345 36.24933 36.76    36.91872 36.13986 36.38975 36.1425  35.73139 36.33    36.77315 36.47842 36.07951 36.38506 36.39218 36.20468 35.9566  36.07916]
+avg t: 36.37228825217799s
+std: 0.31229601915846344s
+Note that the first iteration was not considered in averaging (since first round start jit).

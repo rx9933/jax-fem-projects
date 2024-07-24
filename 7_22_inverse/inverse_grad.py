@@ -16,7 +16,7 @@ from jax_fem.utils import save_sol
 from jax_fem.generate_mesh import box_mesh, get_meshio_cell_type, Mesh, cells_out, read_in_mesh
 from jax_fem.basis import get_elements
 from jax import jit
-from scipy.optimize import minimize
+
 class UnitSystem:
     def __init__(self, simlen_to_meters):
         self.simlen_to_meters = simlen_to_meters
@@ -109,6 +109,12 @@ class HyperElasticity(Problem):
             energy = alpha * C1 * (I1 - 3.)  - 2 * np.log(J) + D1 *(np.log(J))**2
             
             if energy.shape!=():
+                print("E shape", energy[0:].shape)
+                # print("E shape", energy[0].shape)
+                # print(energy[0])
+                # jax.debug.print("energy: {}", energy)
+                # jax.debug.print("00: {}", energy [0])
+                # print("Aaa")
                 return energy[0]
                 
             return energy
@@ -120,6 +126,14 @@ class HyperElasticity(Problem):
             I = np.eye(self.dim)
             F = u_grad + I
             P = P_fn(F, X)
+            # try:
+            #     print("P",P)
+            #     print(np.array(P).shape)
+            #     if np.array(P).shape == (1,):
+            #         print("AAA")
+            #         P = P_fn(F, X)[0]
+            # except:
+            #     pass
             return P
 
         return first_PK_stress
@@ -141,6 +155,9 @@ def get_f(u_grad):
     return F
 
 def get_c(f_vals):
+    print(f_vals.shape)
+    print(f_vals.reshape(19634, 4, 3, 3))
+    # print(f_vals)
     C = f_vals.swapaxes(2, 3) @ f_vals
     return C
 
@@ -311,17 +328,12 @@ def main():
     def save_sol_all(sol):
         shape_grads_physical = get_shape_grads_physical(problem)
         cell_sols = sol[np.array(problem.fes[0].cells)]
-        #("sol shape", sol.shape) # 3906,3;  3,
-        #(cell_sols.shape) # 19634, 4, 3;   19634, 4
-        #(shape_grads_physical[:, :, :, None, :].shape)# (19634, 4, 4, 1, 3)
+        print("sol shape", sol.shape) # 3906,3;  3,
+        print(cell_sols.shape) # 19634, 4, 3;   19634, 4
+        #print(shape_grads_physical[:, :, :, None, :].shape)#(19634, 4, 4, 1, 3)
         u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
         u_grads = np.sum(u_grads, axis=2)
 
-        vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
-
-        f_vals = vectorized_get_f(u_grads)
-        C = get_c(f_vals)
-        
         # Initialize J matrix, and alpha matrix
         ug_s = u_grads.shape
         j_mat = np.zeros(ug_s[:2])
@@ -335,32 +347,36 @@ def main():
 
         # Vectorize the operations for j_mat, and alpha_mat
         vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
-  
+        vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+        
+
+        f_vals = vectorized_get_f(u_grads)
+        C = get_c(f_vals)
 
         
-        j_mat = vectorized_get_j(f_vals)
-        # alpha 
-        """
-            vectorized_get_alpha = np.vectorize(lambda x0: get_alpha(x0, problem.fes), signature='(n)->()')
-            local_alpha = vectorized_get_alpha(points)
+        # j_mat = vectorized_get_j(f_vals)
+        # #print("vect", vectorized_get_alpha.shape)
+        # try:
+        #     vectorized_get_alpha = np.vectorize(lambda x0: get_alpha(x0, problem.fes), signature='(n)->()')
+        #     local_alpha = vectorized_get_alpha(points)
 
-        except:
-            pshape = point_vals.shape
-            for c in range(pshape[0]):
-                print(c/pshape[0])
-                for p in range(pshape[1]):
-                    # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
-                    # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
-                    alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p],problem.fes)[0])
-            local_alpha = localize(alpha_mat)
-        # print("AMAT", alpha_mat)
-        print("AMAT SHAPE", local_alpha.shape)
-        """
-        local_j = localize(j_mat)
+        # except:
+        #     pshape = point_vals.shape
+        #     for c in range(pshape[0]):
+        #         print(c/pshape[0])
+        #         for p in range(pshape[1]):
+        #             # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
+        #             # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
+        #             alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p],problem.fes)[0])
+        #     local_alpha = localize(alpha_mat)
+        # # print("AMAT", alpha_mat)
+        # print("AMAT SHAPE", local_alpha.shape)
+
+        # local_j = localize(j_mat)
      
-        vtk_path = os.path.join(data_dir, f'vtk/inverse.vtu')
-        #print(sol) # is traced array
-        save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
+        # vtk_path = os.path.join(data_dir, f'vtk/inverse.vtu')
+
+        # save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
         return C 
     
     #
@@ -371,44 +387,33 @@ def main():
         C_c = save_sol_all(sol_list[0])
         C_cquad = problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0]
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
-
-        print(f'Objective = {obj:.7f}')
-
+        print("OBJE",obj)
         return obj
-    
-    # @jax.jit
+
     def composed_fn(params):
-        print("PARAMS (inside func)",params[0][0])
         return test_fn(fwd_pred(params))
     
-    flag_1 = False # 
+    print("0 objective", composed_fn(params))
 
-    def obj_and_grad(alpha):
-        
-        params = [alpha]
-        problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        problem.set_params(params)
+    flag_1 = False
 
-
-        # Implicit differentiation wrapper
-        fwd_pred = ad_wrapper(problem) 
-        sol_list = fwd_pred(params)
-        # print(sol_list[0].shape)
-        J = composed_fn(params)
-        print("Curr objective", J) # ~608.875 for J0
-        print("PARAMS (outside func)",params[0][0])
-        dJda = jax.grad(composed_fn)(params)[0]
-        print("DJDA",dJda)
-        print(dJda.shape)
-
-        Jprime = np.einsum('ao,ao->o',dJda, alpha)[0]
-        return (J, Jprime)
-    
     a_0 = np.ones((problem.fe.num_cells,1))
-    print(obj_and_grad(a_0))
-    #scipy.minimize
-    #result = minimize(obj_and_grad, a_0, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True}, )
+    params = [a_0]
+    #@@@@
+    problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+    problem.set_params(params)
+    #@@@@
 
+    # Implicit differentiation wrapper
+    fwd_pred = ad_wrapper(problem) 
+    sol_list = fwd_pred(params)
+    J0 = composed_fn(params)
+    print("Curr objective", J0) # ~608.875
+    dJda = jax.grad(composed_fn)(params)[0]
+    print("DJDA",dJda)
+    print(dJda.shape)
+
+    
     
 if __name__ == "__main__":
     main()

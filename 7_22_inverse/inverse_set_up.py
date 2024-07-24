@@ -3,7 +3,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('/workspace')
-# os.environ['JAX_PLATFORMS'] = 'cpu'
+os.environ['JAX_PLATFORMS'] = 'cpu'
 from math import sqrt
 import jax
 import jax.numpy as np
@@ -299,14 +299,14 @@ def main():
     flag_1 = True # ideal, use pre-specified alpha val
     a_ex = 2 * np.ones((problem.fe.num_cells,1)) 
     params = [a_ex]
-    
+    print("Ideal Values")
     # Set parameters in the problem instance
     problem.set_params(params)
 
-    # Implicit differentiation wrapper
+    # Implicit differentiation wrapper  
     fwd_pred = ad_wrapper(problem)
     sol_list = fwd_pred(params)
-    sol_0 = solver(problem, use_petsc = True)
+    # sol_0 = solver(problem, use_petsc = True)
     
     def save_sol_all(sol):
         shape_grads_physical = get_shape_grads_physical(problem)
@@ -360,52 +360,56 @@ def main():
      
         vtk_path = os.path.join(data_dir, f'vtk/inverse.vtu')
         #print(sol) # is traced array
-        save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
+        # print(jax.jit(sol))
+        #save_sol(problem.fes[0], jax.jit(sol), vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
         return C 
     
     #
-    C_0 = save_sol_all(sol_0[0])
+    C_0 = save_sol_all(sol_list[0])
     def test_fn(sol_list):
         C_0quad = problem.fes[0].convert_from_dof_to_quad_C(C_0)[:, :, 0,0] # 4 points per tetra
         cells_JxW = problem.JxW[:, 0, :]
         C_c = save_sol_all(sol_list[0])
         C_cquad = problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0]
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
-
-        print(f'Objective = {obj:.7f}')
-
+        #print("C_0 - C_c",C_0quad - C_cquad)
+        #print(f'Objective = {obj:.7f}')
+        print("OBJ", obj)
         return obj
     
-    # @jax.jit
+    #@jax.jit
     def composed_fn(params):
         print("PARAMS (inside func)",params[0][0])
+        # print("output objective", fwd_pred(params))
         return test_fn(fwd_pred(params))
     
     flag_1 = False # 
 
     def obj_and_grad(alpha):
-        
+        print("ALPHA",alpha[0])
         params = [alpha]
-        problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+        #problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
         problem.set_params(params)
 
-
         # Implicit differentiation wrapper
+        print("Current Solution")
         fwd_pred = ad_wrapper(problem) 
         sol_list = fwd_pred(params)
         # print(sol_list[0].shape)
+        print("Gradient")
         J = composed_fn(params)
         print("Curr objective", J) # ~608.875 for J0
         print("PARAMS (outside func)",params[0][0])
         dJda = jax.grad(composed_fn)(params)[0]
-        print("DJDA",dJda)
+        # print("DJDA",dJda)
         print(dJda.shape)
-
+        # assert np.all(np.isclose(dJda,0))
         Jprime = np.einsum('ao,ao->o',dJda, alpha)[0]
         return (J, Jprime)
     
     a_0 = np.ones((problem.fe.num_cells,1))
-    print(obj_and_grad(a_0))
+
+    print(obj_and_grad(a_0)[0])
     #scipy.minimize
     #result = minimize(obj_and_grad, a_0, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True}, )
 

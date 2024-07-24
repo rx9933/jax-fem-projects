@@ -733,6 +733,7 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
     def xcell_displacement(point, load_factor=1):
         ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
         i = np.nonzero(ind,size=1)#(ind==np.array([1,1,1]))
+        print((disp[i,:][0][0][0]*load_factor)[0])
         return disp[i,:][0][0][0]*load_factor
     def ycell_displacement(point, load_factor=1):
         ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
@@ -742,21 +743,28 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
         ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
         i = np.nonzero(ind,size=1)#(ind==np.array([1,1,1]))
         return disp[i,:][0][0][2]*load_factor
-
+    
     def apply_load_steps(problem, num_steps = 2):
         load_factor = 1 / num_steps
+        sol = None
         for step in np.arange(1/num_steps, 1 + 1/num_steps, 1 / num_steps ):
             logger.info(f"STEP {step}")
             load_factor = step
+            # problem.dirichlet_bc_info[0][2][3:] = [
+            #     lambda point, load_factor=load_factor: xcell_displacement(point, load_factor),
+            #     lambda point, load_factor=load_factor: ycell_displacement(point, load_factor),
+            #     lambda point, load_factor=load_factor: zcell_displacement(point, load_factor)
+            # ]
             problem.dirichlet_bc_info[0][2][3:] = [
-                lambda point, load_factor=load_factor: xcell_displacement(point, load_factor),
-                lambda point, load_factor=load_factor: ycell_displacement(point, load_factor),
-                lambda point, load_factor=load_factor: zcell_displacement(point, load_factor)
+                lambda point: xcell_displacement(point, load_factor),
+                lambda point: ycell_displacement(point, load_factor),
+                lambda point: zcell_displacement(point, load_factor)
             ]
-            if step ==1/num_steps:
-                sol = solver(problem, use_petsc=True)
-            else:
-                sol = solver(problem, use_petsc=True, initial_guess=sol)
+            point = np.array([8.262040710449218750e+01, 8.185975646972656250e+01, 1.208771514892578125e+01])
+            print("bbb", xcell_displacement(point, load_factor))
+            print("AAA",problem.dirichlet_bc_info[0][2][3](point))
+
+            sol = solver(problem, use_petsc=True, initial_guess=sol)
         return sol
     
     @jax.custom_vjp

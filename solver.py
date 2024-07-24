@@ -262,7 +262,7 @@ def linear_incremental_solver(problem, res_vec, A_fn, dofs, precond, use_petsc, 
             pc_type = petsc_options['pc_type']
         else:
             ksp_type = 'bcgsl'
-            pc_type = 'gamg'
+            pc_type = 'ilu'
         inc = petsc_solve(A_fn, b, ksp_type, pc_type)
     else:
         # x0 will always be correct at boundary locations
@@ -695,7 +695,7 @@ def implicit_vjp(problem, sol_list, params, v_list, use_petsc_adjoint, petsc_opt
             pc_type = petsc_options_adjoint['pc_type']
         else:
             ksp_type = 'minres'
-            pc_type = 'gamg'
+            pc_type = 'ilu'
 
         adjoint_vec = petsc_solve(A_transpose, v_vec, ksp_type, pc_type)
     else:
@@ -727,8 +727,8 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
     petsc_options_adjoint: dic   
         PETSc solver options specified by user for the adjoint problem             
     """
-    init_pos = np.asarray(onp.loadtxt("../demos/7_20/cell_vertices_initial.txt"))
-    disp = np.asarray(onp.loadtxt("../demos/7_20/cell_vertices_final.txt")) - init_pos
+    init_pos = np.asarray(onp.loadtxt("../../demos/7_22_inverse/cell_vertices_initial.txt"))
+    disp = np.asarray(onp.loadtxt("../../demos/7_22_inverse/cell_vertices_final.txt")) - init_pos
     tol = 10**-9
     def xcell_displacement(point, load_factor=1):
         ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
@@ -753,7 +753,7 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
                 lambda point, load_factor=load_factor: ycell_displacement(point, load_factor),
                 lambda point, load_factor=load_factor: zcell_displacement(point, load_factor)
             ]
-            if step ==1/num_steps :
+            if step ==1/num_steps:
                 sol = solver(problem, use_petsc=True)
             else:
                 sol = solver(problem, use_petsc=True, initial_guess=sol)

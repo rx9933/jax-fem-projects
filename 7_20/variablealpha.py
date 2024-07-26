@@ -180,7 +180,7 @@ def problem():
     #     return np.any(np.isclose(point, np.array(pdata)))
 
     def cell_surface(point):
-        return np.any(np.all(np.isclose(np.array(pdata), point, atol=10**-2), axis=1))
+        return np.any(np.all(np.isclose(np.array(pdata), point, atol=10**-5), axis=1))
 
     
     #TESTS
@@ -240,10 +240,11 @@ def problem():
             initial_sol = sol
     print("DONE SOLVING")
     vtk_path = os.path.join(data_dir, f'vtk/variablealpha.vtu')
+
     save_sol(problem.fes[0], sol[0], vtk_path)#, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
     
 if __name__ == "__main__":
-    l=21
+    l=1
     t = np.zeros(l)
     for i in range(l):
         start_time = time.time()

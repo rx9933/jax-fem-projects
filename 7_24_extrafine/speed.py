@@ -97,7 +97,7 @@ def get_f(u_grad):
     I = np.identity(u_grad.shape[0])
     F = u_grad + I
     return F
-@jax.jit
+
 def get_shape_grads_ref(ele_type):
     element_family, basix_ele, _, _, degree, re_order = get_elements(ele_type)
     element = basix.create_element(element_family, basix_ele, degree)
@@ -106,7 +106,7 @@ def get_shape_grads_ref(ele_type):
     shape_grads_ref = onp.transpose(vals_and_grads[1:, :, :, 0], axes=(1, 2, 0))
     logger.debug(f"ele_type = {ele_type}, node_points.shape = (num_nodes, dim) = {node_points.shape}")
     return shape_grads_ref
-@jax.jit
+
 def get_shape_grads_physical(problem):
     shape_grads_ref = get_shape_grads_ref(problem.fes[0].ele_type)
     physical_coos = problem.fes[0].points[problem.fes[0].cells]
@@ -232,38 +232,55 @@ def problem():
     #     local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
 
     #     return local_mat
+    cells,points = cells_out()
+    global_point_inds = cells
+    point_vals = points[global_point_inds]
 
-    # # global_point_inds = cells
-    # # point_vals = points[global_point_inds]
+    shape_grads_physical = get_shape_grads_physical(problem)
+    cell_sols = sol[0][np.array(problem.fes[0].cells)]
+    u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
+    u_grads = np.sum(u_grads, axis=2)
 
-    # shape_grads_physical = get_shape_grads_physical(problem)
-    # cell_sols = sol[0][np.array(problem.fes[0].cells)]
-    # u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
-    # u_grads = np.sum(u_grads, axis=2)
-
-    # # Initialize J matrix, and alpha matrix
-    # ug_s = u_grads.shape
-    # j_mat = np.zeros(ug_s[:2])
-    # print("JMAT",cells.shape)
-    # alpha_mat = np.zeros(ug_s[:2])
+    # Initialize J matrix, and alpha matrix
+    ug_s = u_grads.shape
+    j_mat = np.zeros(ug_s[:2])
+    print("JMAT",cells.shape)
+    alpha_mat = np.zeros(ug_s[:2])
     # vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
     # vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
     # f_vals = vectorized_get_f(u_grads)
     # j_mat = vectorized_get_j(f_vals)
     # try:
-    cells,points = cells_out()
-    vectorized_get_alpha = np.vectorize(lambda x0: get_alpha(x0), signature='(n)->()')
-    local_alpha = vectorized_get_alpha(points)
+   
+    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+    alpha_mat = vectorized_get_alpha(points)
+    def localize(orig_mat):
+        local_mat = np.zeros(len(points))
+        num_repeat = np.zeros(len(points))
+        for r in range(cells.shape[0]):
+            for c in range(cells.shape[1]):
+                point = points[cells[r,c]]
+                ind = np.where(np.all(points == point, axis = 1))
+                local_mat = local_mat.at[ind].add(orig_mat[r,c])
+                num_repeat = num_repeat.at[ind].add(1)
+            if r%100==0:  
+                print("percent finished", r/cells.shape[0]*100) 
+        local_mat = local_mat/num_repeat
+        return local_mat
 
+    pshape = point_vals.shape
+    # print(pshape)
+    # for c in range(pshape[0]):
+    #     print(c/pshape[0])
+    #     for p in range(pshape[1]):
+    #         # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
+    #         # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
+    #         # print(point_vals[c,p][0])
+    #         alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p][0]))
+
+    local_alpha = localize(alpha_mat)
     # except:
-    #     # pshape = point_vals.shape
-    #     # for c in range(pshape[0]):
-    #     #     print(c/pshape[0])
-    #     #     for p in range(pshape[1]):
-    #     #         # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
-    #     #         # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
-    #     #         alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p],problem.fes)[0])
-    #     # local_alpha = localize(alpha_mat)
+
     #     pass
 
     #     local_j = localize(j_mat)

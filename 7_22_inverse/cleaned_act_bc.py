@@ -45,6 +45,8 @@ def get_alpha(x0, fes=None):
         aideal = 1/2 * (((rsc-rcrit)/(rff-rcrit))**2 + 1)
         return aideal
     else:        
+        print("ashape",a.shape)
+        print("X", x0)
         a_quad = fes[0].convert_from_dof_to_quad_a(a)[:, :, 0]
         x_points = fes[0].get_physical_quad_points()
         matching_indices = np.where((np.array(x_points) == x0).all(axis=-1), size=1)
@@ -254,88 +256,31 @@ def main():
         f_vals = vectorized_get_f(u_grads)
 
         C = get_c(f_vals)
-        
-        # Initialize J matrix, and alpha matrix
-        ug_s = u_grads.shape
-        j_mat = np.zeros(ug_s[:2])
-        alpha_mat = np.zeros(ug_s[:2])
-
-        # # Get global point indices
-        global_point_inds = cells
-
-        # # Get point values
-        point_vals = points[global_point_inds]
-
-        # Vectorize the operations for j_mat, and alpha_mat
-        vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
-  
-
-        
-        j_mat = vectorized_get_j(f_vals)
-        # alpha 
-        """
-            vectorized_get_alpha = np.vectorize(lambda x0: get_alpha(x0, problem.fes), signature='(n)->()')
-            local_alpha = vectorized_get_alpha(points)
-
-        except:
-            pshape = point_vals.shape
-            for c in range(pshape[0]):
-                print(c/pshape[0])
-                for p in range(pshape[1]):
-                    # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
-                    # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
-                    alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p],problem.fes)[0])
-            local_alpha = localize(alpha_mat)
-        # print("AMAT", alpha_mat)
-        print("AMAT SHAPE", local_alpha.shape)
-        """
-        local_j = localize(j_mat)
-     
-        vtk_path = os.path.join(data_dir, f'vtk/inverse.vtu')
-        #print(sol) # is traced array
-        # save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
         return C 
     
-    #
+
     C_0 = save_sol_all(sol_0)
-    # print("SOL 0", sol_0[0][-1])
     def test_fn(sol_list):
         C_0quad = problem.fes[0].convert_from_dof_to_quad_C(C_0)[:, :, 0,0] # 4 points per tetra
         cells_JxW = problem.JxW[:, 0, :]
         C_c = save_sol_all(sol_list)
-        # if flag_1 == False:
-            # print("NORM",np.linalg.norm(C_c-C_0))
         C_cquad = problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0]
-        # print(C_0quad[0])
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
 
-
-        # regularization=10**-8
-        # print(np.gradient(a))
-        # tik = np.sum(np.gradient(a)**2)
-        # tikhanov = tik*regularization
-        # print("TK",tikhanov)
-        # obj +=tikhanov
-
-        # obj = np.sum((sol_list[0] - sol_0[0])**2)
+        obj = np.sum((sol_list[0] - sol_0[0])**2)
         return obj
-    
-    #@jax.jit
+
     def composed_fn(params):
-        problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        problem.set_params(params)
-        fwd_pred = ad_wrapper(problem)
-        sol_list = fwd_pred(params)
-        # curr_sol = solver(problem, use_petsc = True)
-        # curr_sol = sol_list
-        
+        # problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+        # problem.set_params(params)
+        # fwd_pred = ad_wrapper(problem)
+        # sol_list = fwd_pred(params)
         print("Composed Function")
-        return test_fn(sol_list)
+        return test_fn(fwd_pred(params))
     
-    flag_1 = False # 
+    flag_1 = False #
 
     def obj_and_grad(alpha):
-        
         params = [alpha]
         J = composed_fn(params)
         print("Curr objective", J) # ~608.875 for J0
@@ -363,25 +308,32 @@ def main():
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
     problem.set_params(params)
     fwd_pred = ad_wrapper(problem)
-    curr_sol = solver(problem, use_petsc = True)
-    obj1 = test_fn(curr_sol)
+    sol_list = fwd_pred(params)
+    obj1 = composed_fn(params)
     print("OBJ1", obj1)
+    dJ = jax.grad(composed_fn)(params)[0]
+    assert np.all(np.isclose(dJ, 0))
+    # print(dJ*10**4)
+
+    # curr_sol = solver(problem, use_petsc = True)
+    # obj1 = test_fn(curr_sol)
     
-    h = 10**-1
-    a_0 = a_0 + h*a_0
-    params = [a_0]
-    problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    problem.set_params(params)
-    fwd_pred = ad_wrapper(problem)
-    curr_sol = solver(problem, use_petsc = True)
-    print("OBJ2", test_fn(curr_sol))
+    
+    # h = 10**-1
+    # a_0 = a_0 + h*a_0
+    # params = [a_0]
+    # problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+    # problem.set_params(params)
+    # fwd_pred = ad_wrapper(problem)
+    # curr_sol = solver(problem, use_petsc = True)
+    # print("OBJ2", test_fn(curr_sol))
 
     # dJda = jax.grad(composed_fn)(params)[0]
     # print(dJda[:10])
     # assert np.all(np.isclose(dJda, 0))
 
-    dJda_fd = (composed_fn(params) - obj1)/h
-    print("FD", dJda_fd)
+    # dJda_fd = (composed_fn(params) - obj1)/h
+    # print("FD", dJda_fd)
 
     out = obj_and_grad(a_0)
     print(out[1])

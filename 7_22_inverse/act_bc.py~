@@ -102,7 +102,6 @@ class HyperElasticity(Problem):
             return P
 
         return first_PK_stress
-    
     def set_params(self, params):
         global a
         a = np.array(params[0])
@@ -293,7 +292,7 @@ def main():
      
         vtk_path = os.path.join(data_dir, f'vtk/inverse.vtu')
         #print(sol) # is traced array
-        # save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
+        save_sol(problem.fes[0], sol, vtk_path)#, point_infos = [{"j":local_j}])#, {"alpha":local_alpha}])
         return C 
     
     #
@@ -303,21 +302,12 @@ def main():
         C_0quad = problem.fes[0].convert_from_dof_to_quad_C(C_0)[:, :, 0,0] # 4 points per tetra
         cells_JxW = problem.JxW[:, 0, :]
         C_c = save_sol_all(sol_list)
-        # if flag_1 == False:
-            # print("NORM",np.linalg.norm(C_c-C_0))
+        if flag_1 == False:
+            print("NORM",np.linalg.norm(C_c-C_0))
         C_cquad = problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0]
-        # print(C_0quad[0])
+        print(C_0quad[0])
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
 
-
-        # regularization=10**-8
-        # print(np.gradient(a))
-        # tik = np.sum(np.gradient(a)**2)
-        # tikhanov = tik*regularization
-        # print("TK",tikhanov)
-        # obj +=tikhanov
-
-        # obj = np.sum((sol_list[0] - sol_0[0])**2)
         return obj
     
     #@jax.jit
@@ -326,11 +316,11 @@ def main():
         problem.set_params(params)
         fwd_pred = ad_wrapper(problem)
         sol_list = fwd_pred(params)
-        # curr_sol = solver(problem, use_petsc = True)
+        curr_sol = solver(problem, use_petsc = True)
         # curr_sol = sol_list
         
         print("Composed Function")
-        return test_fn(sol_list)
+        return test_fn(curr_sol)
     
     flag_1 = False # 
 
@@ -340,23 +330,12 @@ def main():
         J = composed_fn(params)
         print("Curr objective", J) # ~608.875 for J0
         dJda = jax.grad(composed_fn)(params)[0]
+        # print("DJDA",dJda)
         print(dJda.shape)
-        
-        assert np.all(np.isclose(dJda, 0))
 
         Jprime = np.einsum('ao,ao->o',dJda, alpha)[0]
-
-        
-        # h = 10**-1
-        # a_0 = alpha + h*alpha
-        # params = [a_0]
-        # problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        # problem.set_params(params)
-        # fwd_pred = ad_wrapper(problem)
-        # curr_sol = solver(problem, use_petsc = True)
-
-        # Jprime = (composed_fn(params) - J)/h
         return (J, Jprime)
+        # return 1
     
     a_0 = np.ones((problem.fe.num_cells,1))
     params = [a_0]
@@ -364,11 +343,9 @@ def main():
     problem.set_params(params)
     fwd_pred = ad_wrapper(problem)
     curr_sol = solver(problem, use_petsc = True)
-    obj1 = test_fn(curr_sol)
-    print("OBJ1", obj1)
+    print("OBJ1", test_fn(curr_sol))
     
-    h = 10**-1
-    a_0 = a_0 + h*a_0
+    a_0 = 7* np.ones((problem.fe.num_cells,1))
     params = [a_0]
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
     problem.set_params(params)
@@ -376,19 +353,18 @@ def main():
     curr_sol = solver(problem, use_petsc = True)
     print("OBJ2", test_fn(curr_sol))
 
-    # dJda = jax.grad(composed_fn)(params)[0]
-    # print(dJda[:10])
-    # assert np.all(np.isclose(dJda, 0))
-
-    dJda_fd = (composed_fn(params) - obj1)/h
-    print("FD", dJda_fd)
-
+    """
     out = obj_and_grad(a_0)
-    print(out[1])
 
+    print("OUT")
+    print(out[0]) # 608.755
+    assert not(np.all(np.isclose(out[1], 0)))
+    """
+    dJda = jax.grad(composed_fn)(params)[0]
+    print(dJda)
     #scipy.minimize
     #result = minimize(obj_and_grad, a_0, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True}, )
-    #print(result.x)
+
     
 
 if __name__ == "__main__":

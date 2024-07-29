@@ -18,8 +18,7 @@ from jax_fem.basis import get_elements
 from jax import jit
 from scipy.optimize import minimize
 import logging
-def log_value(x):
-    logging.ERROR(f'logged val:{x}')
+
 
 class UnitSystem:
     def __init__(self, simlen_to_meters):
@@ -85,8 +84,6 @@ def get_alpha(x0, a, fes=None):
         print("MIT", matching_indices)
         jax.debug.print("MAT: {}", matching_indices)
         print("A",a)
-        jax.debug.callback(log_value, a)
-        jax.debug.callback(log_value, matching_indices)
         jax.debug.print("A:{}",a)
         val = a[matching_indices]
  

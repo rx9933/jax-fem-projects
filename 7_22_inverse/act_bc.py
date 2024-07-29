@@ -66,7 +66,6 @@ class HyperElasticity(Problem):
             vec = self.fes[0].vec
             u_grads = cell_sol[None, :, :, None] * cell_shape_grads[:, :, None, :]
             u_grads = np.sum(u_grads, axis=1)
-            print("PG",physical_quad_points.shape)
             u_grads_reshape = u_grads.reshape(-1, vec, self.dim)
             u_physics = jax.vmap(tensor_map)(u_grads_reshape, physical_quad_points, *cell_internal_vars).reshape(u_grads.shape)
             val = np.sum(u_physics[:, None, :, :] * cell_v_grads_JxW, axis=(0, -1))

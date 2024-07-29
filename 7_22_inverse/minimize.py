@@ -214,7 +214,7 @@ def cell_surface(point):
     return np.any(np.all(np.isclose(point, np.array(pdata),atol =10**-5), axis =1))
 
 
-def save_sol_all(sol,problem):
+def Cauchy(sol,problem):
     shape_grads_physical = get_shape_grads_physical(problem)
     cell_sols = sol[0][np.array(problem.fes[0].cells)]
     u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
@@ -226,8 +226,10 @@ def save_sol_all(sol,problem):
     return C 
 
 def main():
-
+    start_time = time.time()
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
+    vtk_path = os.path.join(data_dir, f'vtk/minimize.vtu')
+
     mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
 
     dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
@@ -244,46 +246,63 @@ def main():
     ref_fwd_pred = ad_wrapper(ref_problem)
     sol_0 = ref_fwd_pred(a_quad)
 
-    C_0 = save_sol_all(sol_0,ref_problem)
+    C_0 = Cauchy(sol_0,ref_problem)
     C_0quad = ref_problem.fes[0].convert_from_dof_to_quad_C(C_0)[:, :, 0,0] # 4 points per tetra
     cells_JxW = ref_problem.JxW[:, 0, :] # THIS SAME FOR ALL PROBLEMS
 
 
 
     #NEW PROBLEM
-    a_0 = np.ones((ref_problem.fe.num_cells,ref_problem.fe.num_quads))
-
-    curr_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    curr_fwd_pred = ad_wrapper(curr_problem)
 
     def objective(params):
+        curr_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+        curr_fwd_pred = ad_wrapper(curr_problem)
         curr_sol = curr_fwd_pred(params)
-        # C_c = save_sol_all(curr_sol, problem)
-        # obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
+        C_c = Cauchy(curr_sol, curr_problem)
+        C_cquad = ref_problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0] # 4 points per tetra
+        obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW) ## RESOURCE EXHAUSTED MEMORY ERROR ON GPU
+
+        regularization = 10**(-8)
+        print("TIK",np.ravel(params).shape)
+        tik = np.sum(np.gradient(np.ravel(params))**2)*regularization
+        
         # obj = np.sum(params[0]**2) 
         # obj = np.sum((C_c-C_0)**2) 
         # obj = np.sum((params)**2)
-        obj = np.sum(curr_sol[0]) ####
-        return obj
+        # obj = np.sum(curr_sol[0]) 
+        return obj + tik
 
     obj_and_intergrad = jax.value_and_grad(objective)
     
     def obj_and_grad(alpha):
+        alpha = np.reshape(alpha,(ref_problem.fe.num_cells,ref_problem.fe.num_quads)) ####
+        print("ALPHA SHAPE", alpha.shape)
         J,dJda = obj_and_intergrad(alpha)
         # assert np.all(np.isclose(dJda, 0))
-        print(dJda)
-        print("djda",np.linalg.norm(dJda))
+        # print(dJda)
+        print("djda Norm",np.linalg.norm(dJda))
         
         # Jprime = np.einsum('ao,ao->o',dJda, alpha)
         return (J, dJda)
-    
-    out = obj_and_grad(a_0)
 
-    print(out[0])
-    # print(out[1])
+
     #scipy.minimize
-    #result = minimize(obj_and_grad, a_0, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True}, )
-    #print(result.x)
+    a_0 = np.ones((ref_problem.fe.num_cells,ref_problem.fe.num_quads))
+    a_in = np.reshape(a_0,(a_0.size,))
+    
+    # 5000 iterations in FEniCS inverse model
+    result = minimize(obj_and_grad, a_in, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":700,"gtol":10**-8,"disp": True}, )
+
+    a_f = np.reshape(result.x,(ref_problem.fe.num_cells,ref_problem.fe.num_quads)) 
+    fin_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+    fin_fwd_pred = ad_wrapper(fin_problem)
+    fin_sol = fin_fwd_pred(a_f)
+
+    # to save sol, alpha should be of shape (num_nodes,); need to convert from quad to dof for nodal solution
+    # currently assigning 1 quad point value (per cell) as cell val
+    
+    save_sol(fin_problem.fes[0], fin_sol, vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
+    print("TIME:",time.time() - start_time)
     
 
 if __name__ == "__main__":

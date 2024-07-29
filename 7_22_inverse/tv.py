@@ -214,7 +214,7 @@ def cell_surface(point):
     return np.any(np.all(np.isclose(point, np.array(pdata),atol =10**-5), axis =1))
 
 
-def save_sol_all(sol,problem):
+def Cauchy(sol,problem):
     shape_grads_physical = get_shape_grads_physical(problem)
     cell_sols = sol[0][np.array(problem.fes[0].cells)]
     u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
@@ -225,9 +225,49 @@ def save_sol_all(sol,problem):
     C = get_c(f_vals)
     return C 
 
-def main():
+def calc_elem_adj(cells):
+    # Function to find shared nodes between two elements
+    def shared_nodes(element1, element2):
+        return len(set(element1).intersection(element2))
 
+    adjacency_list = []
+
+    # Check for adjacency by shared nodes
+    for i in range(len(cells)):
+        print(i/len(cells))
+        for j in range(i + 1, len(cells)):
+            if shared_nodes(cells[i], cells[j]) >= 3:  # At least 3 common points to have a face in contact
+                adjacency_list.append([i, j])
+
+    # Convert the adjacency list to a numpy array
+    adjacency_matrix = np.array(adjacency_list)
+    # onp.savetxt("adjacency_matrix.txt", onp.array(adjacency_matrix), fmt='%d')
+    
+    return adjacency_matrix
+
+
+def cross_area(common_p, points):
+    print("COMMON P shape", common_p.shape)
+    print("Common P Point values shape", points[common_p[:,1]].shape)
+    assert points[common_p[:,1]].shape == (37793,3) 
+
+    pval = points[common_p[:,0]]
+    vec1 = points[common_p[:,1]] - pval
+    vec2 = points[common_p[:,2]] - pval
+
+
+    c_p = np.cross(vec1, vec2)
+    areas = 0.5 * np.linalg.norm(c_p, axis = 1)
+    
+    print("area shape",areas.shape)
+
+    return areas 
+
+def main():
+    start_time = time.time()
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
+    vtk_path = os.path.join(data_dir, f'vtk/minimize.vtu')
+
     mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
 
     dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
@@ -244,47 +284,146 @@ def main():
     ref_fwd_pred = ad_wrapper(ref_problem)
     sol_0 = ref_fwd_pred(a_quad)
 
-    C_0 = save_sol_all(sol_0,ref_problem)
+    C_0 = Cauchy(sol_0,ref_problem)
     C_0quad = ref_problem.fes[0].convert_from_dof_to_quad_C(C_0)[:, :, 0,0] # 4 points per tetra
     cells_JxW = ref_problem.JxW[:, 0, :] # THIS SAME FOR ALL PROBLEMS
 
 
 
     #NEW PROBLEM
-    a_0 = np.ones((ref_problem.fe.num_cells,ref_problem.fe.num_quads))
-
-    curr_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    curr_fwd_pred = ad_wrapper(curr_problem)
 
     def objective(params):
+        curr_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+        curr_fwd_pred = ad_wrapper(curr_problem)
         curr_sol = curr_fwd_pred(params)
-        # C_c = save_sol_all(curr_sol, problem)
-        # obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
+        C_c = Cauchy(curr_sol, curr_problem)
+        C_cquad = ref_problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0] # 4 points per tetra
+        obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW) ## RESOURCE EXHAUSTED MEMORY ERROR ON GPU
+
+        regularization = 10**(-8)
+        print("TIK",np.ravel(params).shape)
+        tik = np.sum(np.gradient(np.ravel(params))**2)*regularization
         # obj = np.sum(params[0]**2) 
         # obj = np.sum((C_c-C_0)**2) 
         # obj = np.sum((params)**2)
-        obj = np.sum(curr_sol[0]) ####
-        return obj
+        # obj = np.sum(curr_sol[0]) 
+        return obj + tik
 
     obj_and_intergrad = jax.value_and_grad(objective)
     
     def obj_and_grad(alpha):
+        alpha = np.reshape(alpha,(ref_problem.fe.num_cells,ref_problem.fe.num_quads)) ####
+        print("ALPHA SHAPE", alpha.shape)
         J,dJda = obj_and_intergrad(alpha)
         # assert np.all(np.isclose(dJda, 0))
-        print(dJda)
-        print("djda",np.linalg.norm(dJda))
+        # print(dJda)
+        print("djda Norm",np.linalg.norm(dJda))
         
         # Jprime = np.einsum('ao,ao->o',dJda, alpha)
         return (J, dJda)
-    
-    out = obj_and_grad(a_0)
 
-    print(out[0])
-    # print(out[1])
+    ###
+
+    # should be added to the objective function
+        
+
+
+    # Display the adjacency matrix
+
+    #[[  0 138]
+#  [  0 631]
+#  [  0 988]]
+
+    # Optionally save the adjacency matrix to a file
+
+
+
+
+
+
+
+
+
+
+    boundary_inds = np.array([[0,0]])
+    # print("SS",mesh.points[638])
+    
+    # 
+    physical_coos = onp.take(mesh.points, mesh.cells, axis=0)
+    selected_coos = physical_coos[boundary_inds[:, 0]]  # (num_selected_faces, num_nodes, dim)
+    # print("SELECTED COOS", selected_coos)
+    
     #scipy.minimize
-    #result = minimize(obj_and_grad, a_0, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True}, )
-    #print(result.x)
+    """
+    a_0 = np.ones((ref_problem.fe.num_cells,ref_problem.fe.num_quads))
+    a_in = np.reshape(a_0,(a_0.size,))
     
+    # 5000 iterations in FEniCS inverse model
+    result = minimize(obj_and_grad, a_in, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":700,"gtol":10**-8,"disp": True}, )
 
+    a_f = np.reshape(result.x,(ref_problem.fe.num_cells,ref_problem.fe.num_quads)) 
+    fin_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+    fin_fwd_pred = ad_wrapper(fin_problem)
+    fin_sol = fin_fwd_pred(a_f)
+
+    # to save sol, alpha should be of shape (num_nodes,); need to convert from quad to dof for nodal solution
+    # currently assigning 1 quad point value (per cell) as cell val
+    
+    save_sol(fin_problem.fes[0], fin_sol, vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
+    print("TIME:",time.time() - start_time)
+    """
+def regularization():
+    ###
+    mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
+
+    dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
+                        [0, 1, 2] * 2, 
+                        [zero_dirichlet_val, zero_dirichlet_val, zero_dirichlet_val] + 
+                        [xcell_displacement, ycell_displacement, zcell_displacement]]
+    
+    ref_problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
+
+    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+    alpha_mat = vectorized_get_alpha(ref_problem.fes[0].points) # 3906,
+    a_quad = ref_problem.fes[0].convert_from_dof_to_quad_a(alpha_mat.reshape(3906,1))[:, :, 0]
+    ###
+
+    cells, points = cells_out()
+    elem_adjacency = calc_elem_adj(cells)
+    num_int_facets = elem_adjacency.shape[0]
+    
+    assert num_int_facets == 37793 
+
+    a = a_quad
+    a_diff = np.abs(a[elem_adjacency[:,0]]-a[elem_adjacency[:,1]])
+
+    print("Alpha diff",a_diff[:4])
+    assert not(np.all(np.isclose(a_diff, 0)))
+    print("Alpha diff shape", a_diff.shape)
+
+    print("Element adjacency shape", elem_adjacency.shape)
+    print("ea col 1", elem_adjacency[:,0].shape)
+
+    pc1 = cells[elem_adjacency[:,0]]
+    pc2 = cells[elem_adjacency[:,1]]
+
+    
+    common_p = np.zeros((num_int_facets, 3))
+    for i in range(num_int_facets):
+        r = np.intersect1d(pc1[i], pc2[i])
+        common_p = common_p.at[i,:].set(r)
+    common_p = common_p.astype('i')
+    
+    print("Common points shape",common_p.shape)
+    assert common_p.shape[0]==num_int_facets
+
+
+    gamma = 10**-8
+    A = cross_area(common_p, points)
+    tv_reg = gamma * np.einsum('fo,f->fo', a_diff, A)
+    assert not(np.all(np.isclose(tv_reg,0)))
+    print("TV regularization", tv_reg)
+    print("TV Regularization norm",np.linalg.norm(tv_reg))
 if __name__ == "__main__":
-    main()
+    # main()
+    regularization()

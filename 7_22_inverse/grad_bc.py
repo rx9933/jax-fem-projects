@@ -303,11 +303,11 @@ def main():
             assert np.linalg.norm(C_c-C_0)>10**-3
         print("C_cC_cC_cC_Cc_Cc")
         C_cquad = problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0]
-        print(C_0quad.shape)
-        print(cells_JxW.shape)
+    
         print("objobjOBJobj")
         print(cells_JxW[0])
-        print(np.sum((C_0quad[:10] - C_cquad[:10])**2 * cells_JxW[:10]))
+        
+        print(C_0quad[0])
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW)
         print("OBJ", obj)
         #print(f'Objective = {obj:.7f}')

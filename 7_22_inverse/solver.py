@@ -25,7 +25,7 @@ def petsc_solve(A, b, ksp_type, pc_type):
     ksp.setFromOptions()
     ksp.setType(ksp_type)
     ksp.pc.setType(pc_type)
-
+    
     logger.debug(
         f'PETSc - Solving with ksp_type = {ksp.getType()}, '
         f'pc = {ksp.pc.getType()}'
@@ -183,10 +183,7 @@ def get_flatten_fn(fn_sol_list, problem):
 
     def fn_dofs(dofs):
         sol_list = problem.unflatten_fn_sol_list(dofs)
-        # alpha_list = problem.unflatten_fn_sol_list(alpha)
-        # print("SL", len(sol_list))
-        # print("shape", sol_list[0].shape)
-        val_list = fn_sol_list(sol_list)#, alpha_list)
+        val_list = fn_sol_list(sol_list)
         return jax.flatten_util.ravel_pytree(val_list)[0]
 
     return fn_dofs
@@ -697,25 +694,24 @@ def implicit_vjp(problem, sol_list, params, v_list, use_petsc_adjoint, petsc_opt
             ksp_type = petsc_options_adjoint['ksp_type']
             pc_type = petsc_options_adjoint['pc_type']
         else:
-            ksp_type = 'minres'
+            ksp_type = 'gmres' # originally minres
             pc_type = 'ilu'
 
         adjoint_vec = petsc_solve(A_transpose, v_vec, ksp_type, pc_type)
-        
     else:
         dofs = jax.flatten_util.ravel_pytree(sol_list)[0]
-        adjoint_linear_fn = get_vjp_contraint_fn_dofs(dofs) # deravative (A out of A_fn = A*x) 
-        adjoint_vec = jax_solve(problem, adjoint_linear_fn, v_vec, None, True) #inverse 
-        assert np.all(np.isclose(adjoint_vec, 0))
+        adjoint_linear_fn = get_vjp_contraint_fn_dofs(dofs)
+        adjoint_vec = jax_solve(problem, adjoint_linear_fn, v_vec, None, True)
+        # adjoint_vec = petsc_solve(problem, adjoint_linear_fn, v_vec, None, True)
 
     vjp_linear_fn = get_vjp_contraint_fn_params(params, sol_list)
-    vjp_result = vjp_linear_fn(problem.unflatten_fn_sol_list(adjoint_vec)) 
+    vjp_result = vjp_linear_fn(problem.unflatten_fn_sol_list(adjoint_vec))
     vjp_result = jax.tree_map(lambda x: -x, vjp_result)
 
     return vjp_result
 
 
-def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_petsc_adjoint=False, petsc_options_adjoint=None):
+def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_petsc_adjoint=True, petsc_options_adjoint=None): # use petsc adjoint = False
     """
     Attributes
     ----------
@@ -789,7 +785,7 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
         initial_guess = problem.initial_guess if hasattr(problem, 'initial_guess') else None
         
         #sol_list = solver(problem, linear=linear, initial_guess=initial_guess, use_petsc=use_petsc, petsc_options=petsc_options)
-        sol_list = apply_load_steps(problem, 2)
+        sol_list = apply_load_steps(problem, 3)
         return sol_list
 
     def f_fwd(params):
@@ -800,8 +796,6 @@ def ad_wrapper(problem, linear=False, use_petsc=False, petsc_options=None, use_p
         logger.info("Running backward and solving the adjoint problem...")
         params, sol_list = res
         vjp_result = implicit_vjp(problem, sol_list, params, v, use_petsc_adjoint, petsc_options_adjoint)
-        print("VJP", len(v))
-        assert not(np.all(np.isclose(v[0],0)))
         return (vjp_result, )
 
     fwd_pred.defvjp(f_fwd, f_bwd)

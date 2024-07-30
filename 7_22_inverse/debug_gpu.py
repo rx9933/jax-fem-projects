@@ -134,7 +134,8 @@ def get_j(F):
     return np.linalg.det(F)
 
 def get_f(u_grad):
-    I = np.identity(u_grad.shape[0])
+    # I = np.identity(u_grad.shape[0])
+    I = np.identity(3)
     F = u_grad + I
     return F
 
@@ -219,7 +220,15 @@ def Cauchy(sol,problem):
     cell_sols = sol[0][np.array(problem.fes[0].cells)]
     u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
     u_grads = np.sum(u_grads, axis=2)
-    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+    # vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+    # f_vals = vectorized_get_f(u_grads)
+    vectorized_get_f = jax.vmap(get_f)
+
+    # # Optionally, JIT compile the vectorized function
+    # vectorized_get_f = jit(vectorized_get_f)
+
+    # Apply the vectorized function to the data
+    print("ug", u_grads.shape)
     f_vals = vectorized_get_f(u_grads)
 
     C = get_c(f_vals)
@@ -287,9 +296,9 @@ def regularization(a, elem_adjacency, A):
     return np.sum(tv_reg)
 
 def main():
-    elem_adjacency = calc_elem_adj(cells)  ####
+    # elem_adjacency = calc_elem_adj(cells)  ####
     # elem_adjacency = np.array(onp.loadtxt("adjacency_matrix.txt")).astype(np.int64)
-    A = all_area(elem_adjacency)
+    # A = all_area(elem_adjacency)
 
     start_time = time.time()
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
@@ -321,10 +330,17 @@ def main():
         curr_sol = curr_fwd_pred(params)
         C_c = Cauchy(curr_sol, curr_problem)
         C_cquad = ref_problem.fes[0].convert_from_dof_to_quad_C(C_c)[:, :, 0,0] # 4 points per tetra
+        print(cells_JxW.shape)
+        obj =np.einsum('ntt,no -> o',(C_0quad - C_cquad)**2, cells_JxW)
+        # print("c0", np.sum((C_0quad - C_cquad)**2, axis=1).shape)
+        # print("OBJ", obj)
+
+
         obj = np.sum((C_0quad - C_cquad)**2 * cells_JxW) ## RESOURCE EXHAUSTED MEMORY ERROR ON GPU
-        
-        tik = regularization(params, elem_adjacency, A)
-        # tik = 0
+        # print("act", obj)
+
+        # tik = regularization(params, elem_adjacency, A)
+        tik = 0
         print("obj + tik",obj + tik)
         return obj + tik
 
@@ -341,7 +357,7 @@ def main():
     a_in = np.reshape(a_0,(a_0.size,))
     
     # 5000 iterations in FEniCS inverse model
-    result = minimize(obj_and_grad, a_in, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":700,"gtol":10**-8,"disp": True,"iprint":100}, )
+    result = minimize(obj_and_grad, a_in, method='L-BFGS-B', jac=True, bounds = [(.5, 10)]*a_0.size, tol = 10**-8,options = {"maxiter":1,"gtol":10**-8,"disp": True,"iprint":100}, )
 
     a_f = np.reshape(result.x,(ref_problem.fe.num_cells,ref_problem.fe.num_quads)) 
     # a_f = a_0

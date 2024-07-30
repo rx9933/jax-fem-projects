@@ -1,4 +1,4 @@
-# fixed boundary selections for gel, forward model finished. 
+# Change num_steps, num_iter, and save_sol
 
 import time
 import os
@@ -60,11 +60,12 @@ class HyperElasticity(Problem):
             # alpha = (radius_cell / np.linalg.norm(X - CENTER)) ** beta
             alpha = get_alpha(X)
             # alpha = 1
-            C1 = 50 # Pascals
-            D1 = C1 * 10000 # D1/C1 = 10**4
+            mu = E / (2. * (1. + nu))
+            kappa = E / (3. * (1. - 2. * nu))
             J = np.linalg.det(F)
+            Jinv = J ** (-2. / 3.)
             I1 = np.trace(F.T @ F)
-            energy = alpha * C1* (I1 - 3.) -2*C1*np.log(J) + D1*(np.log(J))**2
+            energy = alpha * (mu / 2.) * (Jinv * I1 - 3.) + (0.5 * kappa) * (J * (J - 1) - np.log(J))
             return energy
 
         P_fn = jax.grad(psi)
@@ -89,10 +90,10 @@ def get_alpha(x0):
     rcrit = rff*np.sqrt(2*a0-1)/(np.sqrt(2*a0-1)+1) #characterestic distance for most degraded gel portion
     aideal = 1/2*(((rsc-rcrit)/(rff-rcrit))**2 + 1)
     return aideal
-@jax.jit
+
 def get_j(F):
     return np.linalg.det(F)
-@jax.jit
+
 def get_f(u_grad):
     I = np.identity(u_grad.shape[0])
     F = u_grad + I
@@ -119,26 +120,25 @@ init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
 # disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 tol = 10**-9
-@jax.jit
+
 def zero_dirichlet_val(point, load_factor=1):
     return 0.
-@jax.jit
+
 def xcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
     return disp[i,:][0][0][0]*load_factor
-@jax.jit
+
 def ycell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
     # print(disp[i,:][0][0][1])
     return disp[i,:][0][0][1]*load_factor
-@jax.jit
+
 def zcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
     return disp[i,:][0][0][2]*load_factor
-
 
 def problem():
     ele_type = 'TET4'
@@ -152,6 +152,7 @@ def problem():
     r = 30
     centroid = np.array([77.30223623, 77.03447408, 66.74390624])
     bounds = np.stack((centroid-box_length/2, centroid+box_length/2))
+
 
 
     def gel_surface(point):
@@ -196,102 +197,48 @@ def problem():
         ]
         
         problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        # if step ==1/num_steps :
-        #     sol = solver(problem, use_petsc=True)
-        #     initial_sol = sol
-        # else:
-        #     sol = solver(problem, use_petsc=True, initial_guess=initial_sol)
-        #     initial_sol = sol
         sol = solver(problem, use_petsc=True, initial_guess=sol)
-    # print("DONE SOLVING")
-    
-    vtk_path = os.path.join(data_dir, f'vtk/finevariablealpha.vtu')
     ###
-    # points, cells = cells_out()
-    # def localize(orig_mat):
-    #      # Number of points
-    #     num_points = points.shape[0]
-
-    #     # Flatten cells and orig_mat
-    #     flattened_cells = cells.flatten()
-    #     flattened_orig_mat = orig_mat.flatten()
-
-    #     # Create indices for repeated points
-    #     repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
-    #     point_indices = flattened_cells
-    #     print(point_indices)
-    #     print("pshape",point_indices.shape)
-    #     # Ensure that point_indices are within valid range
-    #     assert np.all(point_indices >= 0) and np.all(point_indices < num_points)
-
-    #     # Create an array to match points to their original indices using jax.numpy.zeros
-    #     updates_local_mat = jax.numpy.zeros(num_points).at[point_indices].add(flattened_orig_mat)
-    #     updates_num_repeat = jax.numpy.zeros(num_points).at[point_indices].add(1)
-
-    #     # Normalize local_mat by num_repeat
-    #     local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
-
-    #     return local_mat
+    """
     cells,points = cells_out()
     global_point_inds = cells
     point_vals = points[global_point_inds]
 
-    shape_grads_physical = get_shape_grads_physical(problem)
-    cell_sols = sol[0][np.array(problem.fes[0].cells)]
-    u_grads = cell_sols[:, None, :, :, None] * shape_grads_physical[:, :, :, None, :]
-    u_grads = np.sum(u_grads, axis=2)
-
-    # Initialize J matrix, and alpha matrix
-    ug_s = u_grads.shape
-    j_mat = np.zeros(ug_s[:2])
-    print("JMAT",cells.shape)
-    alpha_mat = np.zeros(ug_s[:2])
-    # vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
-    # vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
-    # f_vals = vectorized_get_f(u_grads)
-    # j_mat = vectorized_get_j(f_vals)
-    # try:
-   
-    # vectorized_get_alpha = np.vectorize(lambda x0: get_alpha(x0), signature='(n)->()')
-    # local_alpha = vectorized_get_alpha(points)
     def localize(orig_mat):
-        local_mat = np.zeros(len(points))
-        num_repeat = np.zeros(len(points))
-        for r in range(cells.shape[0]):
-            for c in range(cells.shape[1]):
-                point = points[cells[r,c]]
-                ind = np.where(np.all(points == point, axis = 1))
-                local_mat = local_mat.at[ind].add(orig_mat[r,c])
-                num_repeat = num_repeat.at[ind].add(1)
-            if r%100==0:  
-                print("percent finished", r/cells.shape[0]*100) 
-        local_mat = local_mat/num_repeat
+        num_points = points.shape[0]
+        flattened_cells = cells.flatten()
+        flattened_orig_mat = orig_mat.flatten()
+
+        repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
+        point_indices = flattened_cells
+
+        assert np.all(point_indices >= 0) and np.all(point_indices < num_points)
+        updates_local_mat = jax.numpy.zeros(num_points).at[point_indices].add(flattened_orig_mat)
+        updates_num_repeat = jax.numpy.zeros(num_points).at[point_indices].add(1)
+        local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
+
         return local_mat
 
-    pshape = point_vals.shape
-    print(pshape)
-    for c in range(pshape[0]):
-        print(c/pshape[0])
-        for p in range(pshape[1]):
-            # print("get alpha", get_alpha(point_vals[c,p],problem.fes))
-            # jax.debug.print("alpha: {}",get_alpha(point_vals[c,p],problem.fes))
-            # print(point_vals[c,p][0])
-            alpha_mat = alpha_mat.at[c,p].set(get_alpha(point_vals[c,p][0]))
+    vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
+    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+    alpha_mat = vectorized_get_alpha(point_vals)
+
     local_alpha = localize(alpha_mat)
-    # except:
 
-    #     pass
+    vtk_path = os.path.join(data_dir, f'vtk/speed.vtu')
 
-    #     local_j = localize(j_mat)
-    # ###
-    save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"alpha":local_alpha}]) # {"j":local_j}, 
-    
+    save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"alpha":local_alpha}])
+    """
+    ###
 if __name__ == "__main__":
-    l=6
+    l=21
     t = np.zeros(l)
     for i in range(l):
+        print("ITER",i)
         start_time = time.time()
         problem()
         t = t.at[i].set(time.time() - start_time)
-        print("TIME",t) #avg t 3.945726823806763 std 0.5014158602174434
+        print("T",t)
+    print(t) #avg t 3.945726823806763 std 0.5014158602174434
     print("avg t",np.average(t[1:]), "std", np.std(t[1:]))

@@ -125,3 +125,14 @@ INVERSE Model, tv_minimize.py on 7_20 coarse mesh, CPU
   F =   1.4959497623082206E-003
 
 TIME: 8186.5304 s
+
+tv_minimize w/ total variance objective
+   N    Tit     Tnf  Tnint  Skip  Nact     Projg        F
+19634    700    721   4815     0     7   1.400D-03   1.816D-03
+  F =   1.8160060528531355E-003
+
+STOP: TOTAL NO. of ITERATIONS REACHED LIMIT                 
+STEP 0.3333333333333333
+STEP 0.6666666666666666
+STEP 1.0
+TIME: 8247.682163476944

@@ -241,8 +241,7 @@ def calc_elem_adj(cells):
 
     # Convert the adjacency list to a numpy array
     adjacency_matrix = np.array(adjacency_list)
-    # onp.savetxt("adjacency_matrix.txt", onp.asanyarray(adjacency_matrix), fmt='%d')
-    
+
     return adjacency_matrix
     
 def cross_area(common_p, points):
@@ -278,12 +277,14 @@ cells, points = cells_out()
 
 def regularization(a, elem_adjacency, A):
     a_diff = np.abs(a[elem_adjacency[:,0]]-a[elem_adjacency[:,1]])
-    gamma = 1
-    print("e")
+    gamma = 10**(-9)
     # assert not(np.all(np.isclose(A,0)))
     # assert not(np.all(np.isclose(a_diff,0))) # will equal 0 on first iteration when inputting alpha as np.ones
     tv_reg = gamma * np.einsum('fo,f->fo', a_diff, A)
+    print("TV REG", )
+    print("%.7f", np.sum(np.linalg.norm(tv_reg))); 
     # assert not(np.all(np.isclose(tv_reg,0)))
+    
     return np.sum(tv_reg)
 
 def main():
@@ -352,7 +353,7 @@ def main():
     # to save sol, alpha should be of shape (num_nodes,); need to convert from quad to dof for nodal solution
     # currently assigning 1 quad point value (per cell) as cell val
     
-    save_sol(fin_problem.fes[0], fin_sol, vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
+    save_sol(fin_problem.fes[0], fin_sol[0], vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
     print("TIME:",time.time() - start_time)
 
 

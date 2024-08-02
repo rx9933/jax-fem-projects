@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>
+<Xdmf Version="3.0" xmlns:xi="http://www.w3.org/2001/XInclude">
+  <Domain>
+    <Grid Name="TimeSeries" GridType="Collection" CollectionType="Temporal">
+      <Grid Name="mesh" GridType="Uniform">
+        <Topology NumberOfElements="371205" TopologyType="Tetrahedron" NodesPerElement="4">
+          <DataItem Dimensions="371205 4" NumberType="UInt" Format="HDF">simulation_output.h5:/Mesh/0/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XYZ">
+          <DataItem Dimensions="66015 3" Format="HDF">simulation_output.h5:/Mesh/0/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="0" />
+        <Attribute Name="u" AttributeType="Vector" Center="Node">
+          <DataItem Dimensions="66015 3" Format="HDF">simulation_output.h5:/VisualisationVector/0</DataItem>
+        </Attribute>
+        <Attribute Name="alpha" AttributeType="Scalar" Center="Node">
+          <DataItem Dimensions="66015 1" Format="HDF">simulation_output.h5:/VisualisationVector/1</DataItem>
+        </Attribute>
+        <Attribute Name="C" AttributeType="Tensor" Center="Node">
+          <DataItem Dimensions="66015 9" Format="HDF">simulation_output.h5:/VisualisationVector/2</DataItem>
+        </Attribute>
+        <Attribute Name="J" AttributeType="Scalar" Center="Node">
+          <DataItem Dimensions="66015 1" Format="HDF">simulation_output.h5:/VisualisationVector/3</DataItem>
+        </Attribute>
+        <Attribute Name="rank" AttributeType="Scalar" Center="Node">
+          <DataItem Dimensions="66015 1" Format="HDF">simulation_output.h5:/VisualisationVector/4</DataItem>
+        </Attribute>
+      </Grid>
+    </Grid>
+  </Domain>
+</Xdmf>

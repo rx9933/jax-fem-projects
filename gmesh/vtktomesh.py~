@@ -1,0 +1,15 @@
+import meshio
+
+# Path to your VTK file
+vtk_file = 'p.vtk'
+
+# Read the VTK file
+mesh = meshio.read(vtk_file)
+
+# Specify output MSH file path
+msh_file = 'p.msh'
+
+# Write the mesh to MSH format
+meshio.write(msh_file, mesh)
+
+print(f"Converted {vtk_file} to {msh_file}")

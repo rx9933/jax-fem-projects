@@ -368,7 +368,7 @@ def main():
     # to save sol, alpha should be of shape (num_nodes,); need to convert from quad to dof for nodal solution
     # currently assigning 1 quad point value (per cell) as cell val
     
-    save_sol(fin_problem.fes[0], fin_sol, vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
+    save_sol(fin_problem.fes[0], fin_sol[0], vtk_path, cell_infos = [{"alpha":np.ravel(a_f)}])   
     print("TIME:",time.time() - start_time)
 
 

@@ -1,9 +1,9 @@
-# fixed boundary selections for gel, forward model finished. 
+# Change num_steps, num_iter, and save_sol
 
 import time
 import os
 import sys
-# os.environ['JAX_PLATFORMS'] = 'cpu'
+os.environ['JAX_PLATFORMS'] = 'cpu'
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('/workspace')
 from math import sqrt
@@ -120,21 +120,20 @@ init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
 # disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 tol = 10**-9
-
+@jax.jit
 def zero_dirichlet_val(point, load_factor=1):
     return 0.
-
+@jax.jit
 def xcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
     return disp[i,:][0][0][0]*load_factor
-
+@jax.jit
 def ycell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
-    # print(disp[i,:][0][0][1])
     return disp[i,:][0][0][1]*load_factor
-
+@jax.jit
 def zcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
@@ -197,23 +196,48 @@ def problem():
         ]
         
         problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        # if step ==1/num_steps :
-        #     sol = solver(problem, use_petsc=True)
-        #     initial_sol = sol
-        # else:
-        #     sol = solver(problem, use_petsc=True, initial_guess=initial_sol)
-        #     initial_sol = sol
         sol = solver(problem, use_petsc=True, initial_guess=sol)
-    # print("DONE SOLVING")
-    # vtk_path = os.path.join(data_dir, f'vtk/finevariablealpha.vtu')
-    # save_sol(problem.fes[0], sol[0], vtk_path)#, point_infos = [{"j":local_j}, {"alpha":local_alpha}])
-    
+    ###
+    """
+    cells,points = cells_out()
+    global_point_inds = cells
+    point_vals = points[global_point_inds]
+
+    def localize(orig_mat):
+        num_points = points.shape[0]
+        flattened_cells = cells.flatten()
+        flattened_orig_mat = orig_mat.flatten()
+
+        repeated_indices = np.repeat(np.arange(cells.shape[0]), cells.shape[1])
+        point_indices = flattened_cells
+
+        assert np.all(point_indices >= 0) and np.all(point_indices < num_points)
+        updates_local_mat = jax.numpy.zeros(num_points).at[point_indices].add(flattened_orig_mat)
+        updates_num_repeat = jax.numpy.zeros(num_points).at[point_indices].add(1)
+        local_mat = np.where(updates_num_repeat == 0, 0, updates_local_mat / updates_num_repeat)
+
+        return local_mat
+
+    vectorized_get_j = np.vectorize(get_j, signature='(n,m)->()')
+    vectorized_get_f = np.vectorize(get_f, signature='(n,m)->(n,m)')
+    vectorized_get_alpha = np.vectorize(get_alpha, signature='(n)->()')
+    alpha_mat = vectorized_get_alpha(point_vals)
+
+    local_alpha = localize(alpha_mat)
+
+    vtk_path = os.path.join(data_dir, f'vtk/speed.vtu')
+
+    save_sol(problem.fes[0], sol[0], vtk_path, point_infos = [{"alpha":local_alpha}])
+    """
+    ###
 if __name__ == "__main__":
-    l=6
+    l=21
     t = np.zeros(l)
     for i in range(l):
+        print("ITER",i)
         start_time = time.time()
         problem()
         t = t.at[i].set(time.time() - start_time)
+        print("T",t)
     print(t) #avg t 3.945726823806763 std 0.5014158602174434
     print("avg t",np.average(t[1:]), "std", np.std(t[1:]))

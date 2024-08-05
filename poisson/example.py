@@ -47,23 +47,6 @@ mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
 Lx, Ly = 1., 1.
 Nx, Ny = 32, 32
 
-# Generate the mesh
-points, cells = rectangle_mesh(Nx=Nx, Ny=Ny, domain_x=Lx, domain_y=Ly)
-import meshio
-# Create a meshio.Mesh object
-mesh = meshio.Mesh(points=points, cells={"quad": cells})
-
-# Define the directory and file path for saving
-data_dir = os.path.join(os.path.dirname(__file__), 'data')
-msh_file = os.path.join(data_dir, 'poisson.msh')
-
-# Create the directory if it does not exist
-os.makedirs(data_dir, exist_ok=True)
-
-# Save the mesh using meshio.write
-meshio.write(msh_file, mesh)
-
-print(f"Mesh saved to {msh_file}")
 # import meshio
 # msh_dir = os.path.join(data_dir, 'msh')
 # os.makedirs(msh_dir, exist_ok=True)

@@ -3,7 +3,7 @@
 import time
 import os
 import sys
-os.environ['JAX_PLATFORMS'] = 'cpu'
+# os.environ['JAX_PLATFORMS'] = 'cpu'
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append('/workspace')
 from math import sqrt
@@ -120,20 +120,21 @@ init_pos = np.asarray(onp.loadtxt("cell_vertices_initial.txt"))
 # disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 disp = np.asarray(onp.loadtxt("cell_vertices_final.txt")) - init_pos
 tol = 10**-9
-@jax.jit
+
 def zero_dirichlet_val(point, load_factor=1):
     return 0.
-@jax.jit
+
 def xcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
     return disp[i,:][0][0][0]*load_factor
-@jax.jit
+
 def ycell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
+    # print(disp[i,:][0][0][1])
     return disp[i,:][0][0][1]*load_factor
-@jax.jit
+
 def zcell_displacement(point, load_factor=1):
     ind = np.where(np.absolute(init_pos-point) < tol, 1, 0)
     i = np.nonzero(ind[:,0],size=1)
@@ -171,19 +172,8 @@ def problem():
     
 
     pdata = onp.loadtxt('cell_vertices_initial.txt')
- 
     def cell_surface(point):
-        a = np.isclose(np.array(pdata), point, atol=10**-2)
-        c = np.all(a, axis=1)
-        return np.any(c)
-        # diff = np.abs(pdata - point)
-        # within_tolerance = diff < 10**-2
-        # # Reduce across the last axis to find rows where all values are within tolerance
-        # close_points = np.all(within_tolerance, axis=1)
-        # # Check if there is any row where all values are within tolerance
-        # return np.any(close_points)
-
-
+        return np.any(np.all(np.isclose(np.array(pdata), point, atol=10**-2), axis=1))
 
     
     dirichlet_bc_info = [[gel_surface] * 3 + [cell_surface] * 3, 
@@ -192,7 +182,7 @@ def problem():
                         [xcell_displacement, ycell_displacement, zcell_displacement]]
     
     problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-    num_steps = 8
+    num_steps = 7
     load_factor = 1 / num_steps
     sol = None
     for step in np.arange(1/num_steps, 1 + 1/num_steps, 1 / num_steps ):
@@ -207,7 +197,7 @@ def problem():
         ]
         
         problem = HyperElasticity(mesh, vec=3, dim=3, ele_type=ele_type, dirichlet_bc_info=dirichlet_bc_info)
-        sol = solver(problem, use_petsc=False, initial_guess=sol)
+        sol = solver(problem, use_petsc=True, initial_guess=sol)
     ###
     """
     cells,points = cells_out()

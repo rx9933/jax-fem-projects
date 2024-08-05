@@ -43,19 +43,19 @@ class Poisson(Problem):
         b = np.array(params[0])
 
 # Specify mesh-related information.
-ele_type = 'TRI3'
+ele_type = 'QUAD4'
 cell_type = get_meshio_cell_type(ele_type)
 
 # data_dir = os.path.join(os.path.dirname(__file__), 'data')
 Lx, Ly = 1., 1.
 
-# meshio_mesh = rectangle_mesh(Nx=10, Ny=10, domain_x=Lx, domain_y=Ly)
-# mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
-import meshio
-mesh = meshio.read('data/msh/tri3_mesh.vtk')
+meshio_mesh = rectangle_mesh(Nx=10, Ny=10, domain_x=Lx, domain_y=Ly)
+mesh = Mesh(meshio_mesh.points, meshio_mesh.cells_dict[cell_type])
+# import meshio
+# mesh = meshio.read('data/msh/quad8_32x32.msh')
 pdata = mesh.points
 
-mesh = Mesh(pdata, mesh.cells_dict[cell_type])
+# mesh = Mesh(pdata, mesh.cells_dict[cell_type])
 
 # Define boundary locations.
 def left(point):
